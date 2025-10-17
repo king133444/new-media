@@ -1,0 +1,167 @@
+## 新媒体工作室管理系统
+
+一个基于 NestJS + Prisma + MySQL 的后端，搭配 React + Ant Design + Redux Toolkit 的前端，内置 Socket.IO 实时通信，覆盖订单全流程、通知中心、交流中心（聊天）、作品集、素材、评价与交易等业务模块。
+
+### 功能概览
+
+- 订单管理
+  - 发布/编辑/删除/取消/完成
+  - 创作者/设计师申请接单，广告主挑选并委派
+  - 委派后自动通知被选中的创作者
+  - 订单广场（创作者端）：支持“已申请”标记、取消按钮隐藏等友好状态展示
+  - 统计与筛选：按状态、金额、关键词等筛选
+
+- 通知中心（全局铃铛）
+  - 实时提醒：申请/委派事件、聊天消息等
+  - 红点未读数、下拉最近提醒、点击跳转相关页面
+  - 全部已读与单条已读（通过 WebSocket 同步到后端）
+  - 离线补推：用户重新上线后自动补发未读提醒
+
+- 交流中心（聊天）
+  - 单聊：实时发送/接收、已读回执、状态去重
+  - 在线状态：用户上线/下线实时广播；页面进入时主动查询在线列表
+  - 离线消息：下次上线补推未读消息
+  - 体验优化：增量追加消息、保持滚动在底部、避免重复/抖动、无刷新实时更新
+
+- 用户与权限
+  - 角色：管理员/广告主/创作者/设计师
+  - JWT 登录鉴权（HTTP 与 WebSocket 统一鉴权）
+  - 个人资料（含创作者资料页）
+
+- 作品集/素材/评价/交易（基础）
+  - 作品集：增删改查、状态筛选
+  - 素材：与用户/订单关联的素材条目
+  - 评价：订单维度评价，支持 reviewer/reviewee 关系
+  - 交易：充值/提现/订单支付，钱包余额同步
+
+### 技术栈
+
+- 后端：NestJS、Prisma、MySQL、Socket.IO、JWT
+- 前端：React、TypeScript、Ant Design、Redux Toolkit、socket.io-client、Axios
+
+---
+
+## 本地运行
+
+### 1 分开配置环境变量（推荐）
+
+后端（backend/.env）：
+
+```env
+PORT=3000
+DATABASE_URL="mysql://user:password@localhost:3306/new_media"
+JWT_SECRET="your-secret-key"
+# 逗号分隔 CORS 来源
+CORS_ORIGINS=http://localhost:3000,http://localhost:3001
+```
+
+前端（fronted/.env）：
+
+```env
+# 后端 HTTP 基址（包含 /api 前缀）
+REACT_APP_API_URL=http://localhost:3000/api
+# WebSocket 网关（Nest 网关命名空间 /ws）
+REACT_APP_WS_HTTP_URL=http://localhost:3000/ws
+```
+
+### 2 安装依赖并启动
+
+后端（NestJS）：
+
+```bash
+cd backend
+yarn install
+npx prisma generate
+npx prisma migrate dev -n init
+yarn start:dev
+# 默认运行于 http://localhost:3000 （WebSocket 命名空间 /ws）
+```
+
+前端（React）：
+
+```bash
+cd fronted
+yarn install
+yarn start
+# 默认运行于 http://localhost:3000 或 3001（取决于你的环境）；API/WS 取自 fronted/.env
+```
+
+> 提示：首次运行请确保数据库已创建，且 .env 中的 `DATABASE_URL` 正确。
+
+---
+
+## Prisma 常用命令
+
+```bash
+cd backend
+# 生成 Prisma Client
+npx prisma generate
+
+# 依据 schema 同步数据库（开发模式）
+npx prisma migrate dev -n <migration_name>
+
+# 查看数据库（Web UI）
+npx prisma studio
+
+# 校验 schema
+npx prisma validate
+```
+
+---
+
+## WebSocket（Socket.IO）工作原理
+
+- 连接鉴权
+  - 前端在建立 Socket.IO 连接时，通过 `auth.token` 携带 JWT；网关使用同一 `JWT_SECRET` 验证并将连接加入 `user:{userId}` 房间。
+
+- 事件设计（部分）
+  - 订单申请创建：`order.application.created` → 仅推送给广告主
+  - 订单申请被接受：`order.application.accepted` → 推送给被委派的创作者
+  - 聊天消息发送：客户端发 `communication.send` → 网关入库后：
+    - 给接收者推送 `communication.message`
+    - 给发送者推送 `communication.message.sent`（作为成功确认）
+  - 会话已读：`communication.read` → 双方收到 `communication.read` 以刷新未读
+  - 在线状态：用户连接/断开时网关广播 `online.changed { userIds }`
+  - 上线补推：新连接建立、计数从 0→1 时，网关查询未读申请/消息，统一通过 `notifications.bulk` 推送
+
+- 前端连接管理
+  - 全局仅保留一条连接；提供 `wsOn/wsOff/wsEmit` 复用
+  - 挂起监听队列：在连接未建立时的订阅会在 `connect` 后统一绑定
+  - 事件去重：2 秒内基于 `event + id` 去重，避免重复渲染
+
+---
+
+## 亮点与优化
+
+- 实时可靠
+  - 消息链路“先入库，再推送”，避免丢失/重复；发送端收到 `communication.message.sent` 才更新
+  - 断线重连补推未读（`notifications.bulk`）
+
+- 在线状态精准
+  - 网关维护 `userId -> 连接计数`，只在 0↔1 变化时广播，避免噪音
+
+- 通知中心体验
+  - 铃铛红点 + 下拉列表，点击跳转，`全部已读/单条已读` 通过 WS 同步
+  - 过滤不应入铃铛的事件（如在线状态）
+
+- 聊天窗口体验
+  - 增量追加消息、自动滚动到底部、避免整表刷新
+  - 去除本地乐观追加导致的重复问题
+
+- 请求统一
+  - 统一使用自定义 Axios 实例（`http.get/post/...`），移除 `fetch/response.ok` 混用
+
+---
+
+## 快速排错（FAQ）
+
+- WebSocket 频繁连接/断开？
+  - 确保只在 `App` 根组件处 `connectWebSocket(token)` 一次，页面内用 `wsOn/wsOff` 订阅，不要重复 `io()`。
+
+- 收到重复消息？
+  - 确认后端仅由网关统一推送；前端事件已做去重与单连接复用。
+
+- 鉴权失败（`secret or public key must be provided`）？
+  - 设置 `JWT_SECRET`，并保证后端网关与认证模块使用同一密钥。
+
+

@@ -7,10 +7,11 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // 启用CORS
-  app.enableCors({
-    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:8000', 'http://10.10.218.17:8000'],
-    credentials: true,
-  });
+  const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3001,http://localhost:8000')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  app.enableCors({ origin: corsOrigins, credentials: true });
 
   // 全局验证管道
   app.useGlobalPipes(new ValidationPipe({
