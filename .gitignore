@@ -1,0 +1,5 @@
+/.DS_Store
+/test-orders-api.sh
+/test-orders-complete.sh
+**/node_modules
+**/dist
