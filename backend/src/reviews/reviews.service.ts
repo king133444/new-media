@@ -28,9 +28,9 @@ export class ReviewsService {
       throw new BadRequestException('只能对已完成的订单进行评价');
     }
 
-    // 检查评价者是否有权限评价
-    if (order.customerId !== userId && order.designerId !== userId) {
-      throw new ForbiddenException('无权评价此订单');
+    // 仅允许广告主评价创作者
+    if (order.customerId !== userId) {
+      throw new ForbiddenException('仅广告主可评价创作者');
     }
 
     // 检查是否已经评价过
@@ -45,10 +45,9 @@ export class ReviewsService {
       throw new BadRequestException('您已经评价过此订单');
     }
 
-    // 检查被评价者是否为订单的另一方
-    const validRevieweeIds = [order.customerId, order.designerId].filter(id => id !== userId);
-    if (!validRevieweeIds.includes(createReviewDto.revieweeId)) {
-      throw new BadRequestException('无效的被评价者');
+    // 被评价者必须是本订单创作者
+    if (createReviewDto.revieweeId !== order.designerId) {
+      throw new BadRequestException('被评价者必须为该订单创作者');
     }
 
     return this.prisma.review.create({
@@ -91,12 +90,14 @@ export class ReviewsService {
 
     const where: any = {};
 
-    // 只显示“与我有关”的评价：我给出的 or 我收到的
-    if (role === 'ADVERTISER' || role === 'CREATOR' || role === 'DESIGNER') {
-      where.OR = [
-        { reviewerId: userId },
-        { revieweeId: userId },
-      ];
+    // 角色过滤：
+    // - 广告主：仅看我给出的评价
+    // - 创作者/设计师：仅看我收到的且评价者为广告主
+    if (role === 'ADVERTISER') {
+      where.reviewerId = userId;
+    } else if (role === 'CREATOR' || role === 'DESIGNER') {
+      where.revieweeId = userId;
+      (where as any).reviewer = { role: 'ADVERTISER' } as any;
     }
 
     if (status) where.status = status;

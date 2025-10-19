@@ -1,11 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Table, Button, Space, Tag, Modal, Form, Input, Select, DatePicker, InputNumber, message, List, Avatar, Drawer, Card, Typography, Upload } from 'antd';
-import { PlusOutlined, EditOutlined, EyeOutlined, CloseOutlined } from '@ant-design/icons';
+import { EditOutlined, EyeOutlined, CloseOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import http from '../store/api/http';
 import dayjs from 'dayjs';
-import { useSelector } from 'react-redux';
-import { RootState } from '../store';
+import { useDispatch, useSelector } from 'react-redux';
+import { AppDispatch, RootState } from '../store';
+import { wsEmit } from '../store/websocket';
+import { clearApplicationNotificationsByOrderId } from '../store/slices/notificationSlice';
 
 const OrderManagement: React.FC = () => {
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -17,12 +19,14 @@ const OrderManagement: React.FC = () => {
   const [filters, setFilters] = useState<{ status?: string; type?: string; keyword?: string }>({});
   const [appModalVisible, setAppModalVisible] = useState(false);
   const [appModalOrder, setAppModalOrder] = useState<any | null>(null);
+  const [appLoading, setAppLoading] = useState(false);
   const [viewVisible, setViewVisible] = useState(false);
   const [viewOrder, setViewOrder] = useState<any | null>(null);
   const [deliverFiles, setDeliverFiles] = useState<any[]>([]);
   const [submittingDeliver, setSubmittingDeliver] = useState(false);
 
   const { user } = useSelector((state: RootState) => state.auth);
+  const dispatch = useDispatch<AppDispatch>();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -248,18 +252,53 @@ const OrderManagement: React.FC = () => {
           >
             查看
           </Button>
-          <Button
-            type="link"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-          >
-            编辑
-          </Button>
+          {user?.role === 'ADVERTISER' && record.status === 'PENDING' && (
+            <Button
+              type="link"
+              icon={<EditOutlined />}
+              onClick={() => handleEdit(record)}
+            >
+              编辑
+            </Button>
+          )}
           {/* 广告主：查看申请并委派 */}
           {user?.role === 'ADVERTISER' && record.status === 'PENDING' && (
             <Button type="link" onClick={() => openApplications(record)}>
               申请/委派
             </Button>
+          )}
+          {user?.role === 'ADVERTISER' && record.status === 'CANCELLED' && (
+            <Button type="link" onClick={() => {
+              // 跳转到广告投放页面并预填
+              const tags = Array.isArray(record.tags)
+                ? record.tags
+                : (typeof record.tags === 'string' ? (record.tags as string).split(',').map((t: string) => t.trim()).filter(Boolean) : []);
+              navigate('/advertiser/ads', {
+                state: {
+                  prefill: {
+                    title: record.title,
+                    amount: record.amount,
+                    type: record.type,
+                    priority: record.priority,
+                    deadline: record.deadline,
+                    tags,
+                  }
+                }
+              });
+            }}>
+              再次发布
+            </Button>
+          )}
+          {user?.role === 'ADVERTISER' && record.status === 'COMPLETED' && (
+            <Button type="link" danger onClick={async () => {
+              try {
+                await http.delete(`/orders/${record.id}`);
+                message.success('订单已删除');
+                fetchOrders();
+              } catch (e: any) {
+                message.error(e?.response?.data?.message || '删除失败');
+              }
+            }}>删除</Button>
           )}
           {/* 广告主取消：已取消状态时不显示 */}
           {!(record.status === 'CANCELLED') && (
@@ -272,23 +311,21 @@ const OrderManagement: React.FC = () => {
     },
   ];
 
-  const handleAdd = () => {
-    setEditingOrder(null);
-    form.resetFields();
-    setIsModalVisible(true);
-  };
+  
 
   const handleEdit = (order: any) => {
+    console.log('order',order);
     
     setEditingOrder(order);
     form.setFieldsValue({
       title: order.title,
-      customer: order.customer.username ?? '-',
-      designer: order.designer.username ?? '-',
+      customer: order.customer?.username ?? '-',
+      designer: order.designer?.username ?? '-',
       amount: order.amount,
       type: order.type,
       priority: order.priority,
       deadline: order.deadline ? dayjs(order.deadline) : null,
+      tagsInput: Array.isArray(order.tags) ? (order.tags as any[]).join('；') : (typeof order.tags === 'string' ? order.tags : ''),
     });
     setIsModalVisible(true);
   };
@@ -313,21 +350,31 @@ const OrderManagement: React.FC = () => {
     form.validateFields().then(async (values) => {
       try {
         if (editingOrder) {
+          const tags = (values.tagsInput || '')
+            .split(/；|;/)
+            .map((t: string) => t.trim())
+            .filter((t: string) => t);
           await http.patch(`/orders/${editingOrder.id}`, {
             title: values.title,
             amount: values.amount,
             type: values.type,
             priority: values.priority,
             deadline: values.deadline ? (values.deadline as any).toISOString() : undefined,
+            tags: JSON.stringify(tags),
           });
           message.success('订单更新成功');
         } else {
+          const tags = (values.tagsInput || '')
+            .split(/；|;/)
+            .map((t: string) => t.trim())
+            .filter((t: string) => t);
           await http.post('/orders', {
             title: values.title,
             amount: values.amount,
             type: values.type,
             priority: values.priority,
             deadline: values.deadline ? (values.deadline as any).toISOString() : undefined,
+            tags: JSON.stringify(tags),
           });
           message.success('订单添加成功');
         }
@@ -345,22 +392,41 @@ const OrderManagement: React.FC = () => {
     form.resetFields();
   };
 
-  // 打开申请列表并进行委派
-  const openApplications = (order: any) => {
-    setAppModalOrder(order);
+  // 打开申请列表并进行委派（拉最新详情，避免首次为空）
+  const openApplications = async (order: any) => {
     setAppModalVisible(true);
+    setAppLoading(true);
+    try {
+      const { data } = await http.get(`/orders/${order.id}`);
+      setAppModalOrder(data);
+    } catch (e) {
+      setAppModalOrder(order);
+    } finally {
+      setAppLoading(false);
+    }
   };
 
   const handleAccept = async (orderId: string, applicationId: string) => {
-    try {
-      await http.post(`/orders/${orderId}/accept/${applicationId}`);
-      message.success('已委派给该创作者');
-      setAppModalVisible(false);
-      setAppModalOrder(null);
-      fetchOrders();
-    } catch (e: any) {
-      message.error(e?.response?.data?.message || '委派失败');
-    }
+    Modal.confirm({
+      title: '确认委派给该创作者？',
+      icon: <ExclamationCircleOutlined style={{ color: '#faad14' }} />,
+      content: '委派后订单将进入进行中，广告主将不可再编辑此订单（涉及资金调整请走退款/补差流程）。',
+      okText: '确认委派',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await http.post(`/orders/${orderId}/accept/${applicationId}`);
+          message.success('已委派给该创作者');
+          try { wsEmit('order.application.read', { applicationId }); } catch {}
+          try { dispatch(clearApplicationNotificationsByOrderId(orderId)); } catch {}
+          setAppModalVisible(false);
+          setAppModalOrder(null);
+          fetchOrders();
+        } catch (e: any) {
+          message.error(e?.response?.data?.message || '委派失败');
+        }
+      }
+    });
   };
 
   return (
@@ -403,9 +469,7 @@ const OrderManagement: React.FC = () => {
             <Button type="primary" onClick={fetchOrders}>查询</Button>
           </div>
         </Space>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-          添加订单
-        </Button>
+        {/* 已移除“添加订单”入口，创建请前往广告投放页 */}
       </div>
 
       <Table
@@ -439,7 +503,7 @@ const OrderManagement: React.FC = () => {
                     {getTypeTag(viewOrder.type)}
                     {getPriorityTag(viewOrder.priority)}
                     <Tag color="blue">金额 ¥{Number(viewOrder.amount || 0).toFixed(2)}</Tag>
-                    {viewOrder.budget ? (<Tag color="geekblue">预算 ¥{Number(viewOrder.budget).toFixed(2)}</Tag>) : null}
+                    {false ? (<Tag color="geekblue">预算 ¥0.00</Tag>) : null}
                     <Tag color={viewOrder.status === 'PENDING' ? 'orange' : viewOrder.status === 'IN_PROGRESS' ? 'blue' : viewOrder.status === 'COMPLETED' ? 'green' : 'red'}>
                       {viewOrder.status}
                     </Tag>
@@ -470,13 +534,18 @@ const OrderManagement: React.FC = () => {
                         if (!viewOrder) return;
                         setSubmittingDeliver(true);
                         try {
-                          // 这里演示用：需替换为实际上传接口，当前仅提交本地名称与占位URL
-                          const files = deliverFiles.map((f: any) => ({ url: f.url || f.response?.url || f.name, title: f.name }));
-                          await http.post(`/orders/${viewOrder.id}/deliverables`, { files });
-                          message.success('交付物已提交');
+                          const formData = new FormData();
+                          (deliverFiles || []).forEach((f: any) => {
+                            if (f.originFileObj) formData.append('files', f.originFileObj);
+                          });
+                          await http.post(`/materials/upload`, formData, {
+                            params: { orderId: viewOrder.id },
+                            headers: { 'Content-Type': 'multipart/form-data' },
+                          });
+                          message.success('交付物已上传');
                           setDeliverFiles([]);
                         } catch (e: any) {
-                          message.error(e?.response?.data?.message || '提交失败');
+                          message.error(e?.response?.data?.message || '上传失败');
                         } finally {
                           setSubmittingDeliver(false);
                         }
@@ -508,18 +577,12 @@ const OrderManagement: React.FC = () => {
               </Space>
             </Card>
 
-            {(viewOrder.description || viewOrder.contentRequirements) && (
+            {(viewOrder.description) && (
               <Card title="说明">
                 {viewOrder.description && (
                   <div style={{ marginBottom: 8 }}>
                     <Typography.Text type="secondary">描述：</Typography.Text>
                     <div>{viewOrder.description}</div>
-                  </div>
-                )}
-                {viewOrder.contentRequirements && (
-                  <div>
-                    <Typography.Text type="secondary">内容要求：</Typography.Text>
-                    <div>{viewOrder.contentRequirements}</div>
                   </div>
                 )}
               </Card>
@@ -553,13 +616,29 @@ const OrderManagement: React.FC = () => {
                       title: '交付物列表',
                       width: 700,
                       content: (
-                        <List
+                    <List
                           dataSource={data || []}
                           renderItem={(item: any) => (
                             <List.Item>
                               <List.Item.Meta
                                 avatar={<Avatar src={item.user?.avatar} />}
-                                title={<a href={item.url} target="_blank" rel="noreferrer">{item.title || item.url}</a>}
+                            title={<a role="button" onClick={async (e) => {
+                              e.preventDefault();
+                              try {
+                                const resp = await http.get(`/materials/${item.id}/preview`, { responseType: 'blob' });
+                                const blob = new Blob([resp.data]);
+                                const url = window.URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = item.title || `material-${item.id}`;
+                                document.body.appendChild(a);
+                                a.click();
+                                a.remove();
+                                window.URL.revokeObjectURL(url);
+                              } catch (err) {
+                                message.error('下载失败');
+                              }
+                            }} href="#!">{item.title || item.url}</a>}
                                 description={item.description || item.type}
                               />
                               <div>{dayjs(item.createdAt).format('YYYY-MM-DD HH:mm')}</div>
@@ -679,10 +758,17 @@ const OrderManagement: React.FC = () => {
           <Form.Item
             name="deadline"
             label="截止日期"
-            // rules={[{ required: true, message: '请选择截止日期' }]}
+            rules={[{ required: true, message: '请选择截止日期' }]}
           >
             <DatePicker style={{ width: '100%' }} showTime />
           </Form.Item>
+
+        <Form.Item
+          name="tagsInput"
+          label="标签（以；分隔）"
+        >
+          <Input placeholder="示例：剪辑；AE；PS" />
+        </Form.Item>
         </Form>
       </Modal>
 
@@ -696,22 +782,24 @@ const OrderManagement: React.FC = () => {
       >
         {appModalOrder && (
           <List
-            dataSource={appModalOrder.applications || []}
+            loading={appLoading}
+            dataSource={(appModalOrder.applications || []).slice().sort((a: any, b: any) => (new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))}
             renderItem={(app: any) => (
               <List.Item
                 actions={[
                   <Button
                     key="accept"
                     type="primary"
+                    disabled={app?.status !== 'PENDING' || appModalOrder?.status !== 'PENDING'}
                     onClick={() => handleAccept(appModalOrder.id, app.id)}
                   >
-                    委派
+                    {app?.status === 'ACCEPTED' ? '已委派' : app?.status === 'REJECTED' ? '已拒绝' : '委派'}
                   </Button>,
                 ]}
               >
                 <List.Item.Meta
                   avatar={<Avatar src={app.user?.avatar} />}
-                  title={app.user?.username || app.userId}
+                  title={<span>{app.user?.username || app.userId}<Tag style={{ marginLeft: 8 }} color={app?.status === 'PENDING' ? 'orange' : app?.status === 'ACCEPTED' ? 'green' : 'red'}>{app?.status || 'PENDING'}</Tag></span>}
                   description={app.message}
                 />
               </List.Item>

@@ -1,39 +1,60 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, Form, Input, InputNumber, DatePicker, Select, Button, message } from 'antd';
 import ordersApi, { CreateOrderPayload } from '../store/api/ordersApi';
 import dayjs from 'dayjs';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const { TextArea } = Input;
 const { Option } = Select;
 
 const AdvertiserAdManagement: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
-  const [form] = Form.useForm<CreateOrderPayload>();
+  const [form] = Form.useForm<any>();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const onFinish = async (values: any) => {
     try {
       setSubmitting(true);
+      const tagsArray: string[] = (values.tagsInput || '')
+        .split(/\s+/)
+        .map((t: string) => t.trim())
+        .filter((t: string) => t);
       const payload: CreateOrderPayload = {
         title: values.title,
         description: values.description,
         type: values.type,
         amount: values.amount,
-        budget: values.budget,
         priority: values.priority,
         deadline: values.deadline ? (values.deadline as dayjs.Dayjs).toISOString() : undefined,
-        contentRequirements: values.contentRequirements,
-        requirements: values.requirements,
-        tags: values.tags,
-      };
+        tags: JSON.stringify(tagsArray),
+      } as any;
       await ordersApi.create(payload);
       message.success('订单创建成功');
       form.resetFields();
+      navigate('/orders');
     } catch (e: any) {
       message.error(e?.response?.data?.message || '创建失败');
     } finally {
       setSubmitting(false);
     }
   };
+
+  // 预填支持：从路由 state.prefill 读取并设置表单
+  useEffect(() => {
+    const state: any = (location as any).state;
+    const prefill = state?.prefill;
+    if (!prefill) return;
+    form.setFieldsValue({
+      title: prefill.title,
+      description: prefill.description,
+      type: prefill.type,
+      amount: prefill.amount,
+      priority: prefill.priority,
+      deadline: prefill.deadline ? dayjs(prefill.deadline) : undefined,
+      tagsInput: Array.isArray(prefill.tags) ? prefill.tags.join(' ') : (prefill.tags || ''),
+    });
+  }, [location, form]);
 
   return (
     <Card title="广告投放管理 - 创建广告订单">
@@ -61,9 +82,7 @@ const AdvertiserAdManagement: React.FC = () => {
           <InputNumber style={{ width: '100%' }} min={0} placeholder="预算内期望支付金额" />
         </Form.Item>
 
-        <Form.Item name="budget" label="预算上限（元）">
-          <InputNumber style={{ width: '100%' }} min={0} placeholder="可选" />
-        </Form.Item>
+        {/* 预算上限已移除 */}
 
         <Form.Item name="priority" label="优先级">
           <Select placeholder="可选">
@@ -73,20 +92,14 @@ const AdvertiserAdManagement: React.FC = () => {
           </Select>
         </Form.Item>
 
-        <Form.Item name="deadline" label="截止时间">
+        <Form.Item name="deadline" label="截止时间" rules={[{ required: true, message: '请选择截止时间' }]}>
           <DatePicker style={{ width: '100%' }} showTime />
         </Form.Item>
 
-        <Form.Item name="contentRequirements" label="内容要求">
-          <TextArea rows={3} placeholder="画面风格、音乐、时长、尺寸等" />
-        </Form.Item>
+        {/* 项目需求/内容要求已移除 */}
 
-        <Form.Item name="requirements" label="项目需求(JSON 字符串)">
-          <TextArea rows={3} placeholder='例如：{"duration":30,"format":"mp4"}' />
-        </Form.Item>
-
-        <Form.Item name="tags" label="标签(JSON 字符串)">
-          <TextArea rows={2} placeholder='例如：["紧急","宣传"]' />
+        <Form.Item name="tagsInput" label="标签（以空格分割）">
+          <Input placeholder="示例：剪辑 AE PS 宣传" />
         </Form.Item>
 
         <Form.Item>

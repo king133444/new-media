@@ -151,12 +151,14 @@ const CommunicationCenter: React.FC = () => {
     setLoading(true);
     try {
       const url = before
-        ? `/communications/conversations/${contactId}?limit=20&before=${encodeURIComponent(before)}`
+        ? `/communications/conversations/${contactId}?limit=20&before=${encodeURIComponent(
+            before
+          )}`
         : `/communications/conversations/${contactId}?limit=20`;
       const { data } = await http.get(url);
       if (before) {
         // 向上插入，不打乱现有顺序
-        setMessages(prev => [...data, ...prev]);
+        setMessages((prev) => [...data, ...prev]);
       } else {
         setMessages(data);
       }
@@ -191,11 +193,12 @@ const CommunicationCenter: React.FC = () => {
     setSelectedContact(contact);
     justSelectedRef.current = true;
     fetchMessages(contact.id);
-    // 滚动到底部
+    // 滚动到底部（使用容器 scroll 而非 scrollIntoView，避免页面整体跳动）
     setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      const el = scrollContainerRef.current;
+      if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
     }, 100);
-  },[]);
+  }, []);
 
   // 获取角色标签颜色
   const getRoleColor = (role: string) => {
@@ -260,10 +263,12 @@ const CommunicationCenter: React.FC = () => {
   // 消息变化时：在三种场景自动滚动到底部
   // 1) 用户当前接近底部（正常会话） 2) 刚选择联系人 3) 刚发送消息
   useEffect(() => {
-    const shouldScroll = userAtBottomRef.current || justSelectedRef.current || justSentRef.current;
+    const shouldScroll =
+      userAtBottomRef.current || justSelectedRef.current || justSentRef.current;
     if (!shouldScroll) return;
     const timer = setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      const el = scrollContainerRef.current;
+      if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
       justSelectedRef.current = false;
       justSentRef.current = false;
     }, 50);
@@ -275,7 +280,8 @@ const CommunicationCenter: React.FC = () => {
     const el = scrollContainerRef.current;
     if (!el) return;
     const threshold = 80; // px
-    userAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+    userAtBottomRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
   }, []);
 
   // 首次加载：拉取会话/联系人并绑定 WS 监听，只在初始运行
@@ -536,7 +542,7 @@ const CommunicationCenter: React.FC = () => {
                 >
                   {/* 上拉加载更多 */}
                   {messages.length >= 20 && (
-                    <div style={{ textAlign: 'center', marginBottom: 8 }}>
+                    <div style={{ textAlign: "center", marginBottom: 8 }}>
                       <Button
                         size="small"
                         onClick={() => {
@@ -613,11 +619,14 @@ const CommunicationCenter: React.FC = () => {
                                   message.sender.id === user?.id
                                     ? "right"
                                     : "left",
-                                marginTop: 4,
+                                marginTop: 2,
                               }}
                             >
-                              <Text type="secondary" style={{ fontSize: 11 }}>
-                                {dayjs(message.createdAt).format("HH:mm")}
+                              <Text
+                                type="secondary"
+                                style={{ fontSize: 11, marginRight: 4 }}
+                              >
+                                {dayjs(message.createdAt).format("MM-DD HH:mm")}
                               </Text>
                               {message.sender.id === user?.id &&
                                 getStatusIcon(message.status)}

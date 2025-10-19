@@ -153,18 +153,23 @@ export class OrdersService {
       }),
       this.prisma.order.count({ where }),
     ]);
-    const ordersWithTagsArray = orders.map((order) => ({
-      ...order,
-      tags:
-        typeof order.tags === "string"
-          ? order.tags
-              .split(",")
-              .map((tag) => tag.trim())
-              .filter(Boolean)
-          : Array.isArray(order.tags)
-            ? order.tags
-            : [],
-    }));
+    const ordersWithTagsArray = orders.map((order) => {
+      let tags = [];
+      if (typeof order.tags === "string") {
+        try {
+          tags = JSON.parse(order.tags);
+          if (!Array.isArray(tags)) tags = [];
+        } catch {
+          tags = [];
+        }
+      } else if (Array.isArray(order.tags)) {
+        tags = order.tags;
+      }
+      return {
+        ...order,
+        tags,
+      };
+    });
     return {
       data: ordersWithTagsArray,
       total,
@@ -472,9 +477,8 @@ export class OrdersService {
       // 通知创作者已放款
       const ts = new Date().toISOString();
       this.notifications.notifyUser(order.designerId, 'order.payout.released', { id: `payout-${orderId}-${ts}`, orderId, amount: order.amount, createdAt: ts });
-      // 提醒双方可进行评价
+      // 仅提醒广告主去评价
       this.notifications.notifyUser(order.customerId, 'reviews.cta', { id: `reviews-cta-${orderId}`, orderId, createdAt: ts });
-      this.notifications.notifyUser(order.designerId, 'reviews.cta', { id: `reviews-cta-${orderId}`, orderId, createdAt: ts });
 
       return { success: true };
     });
@@ -631,19 +635,21 @@ export class OrdersService {
       throw new ForbiddenException("无权操作此订单");
     }
 
-    if (
-      order.status === OrderStatus.COMPLETED ||
-      order.status === OrderStatus.CANCELLED
-    ) {
-      throw new BadRequestException("订单状态不允许此操作");
+    if (order.status === OrderStatus.PENDING || order.status === OrderStatus.IN_PROGRESS) {
+      // 仍走取消流程
+      return this.prisma.order.update({
+        where: { id },
+        data: {
+          status: OrderStatus.CANCELLED,
+        },
+      });
     }
-
-    return this.prisma.order.update({
-      where: { id },
-      data: {
-        status: OrderStatus.CANCELLED,
-      },
-    });
+    // 已完成允许删除
+    if (order.status === OrderStatus.COMPLETED) {
+      return this.prisma.order.delete({ where: { id } });
+    }
+    // 其他状态（已取消）默认不允许重复操作
+    throw new BadRequestException("订单状态不允许此操作");
   }
 
   // 获取订单统计

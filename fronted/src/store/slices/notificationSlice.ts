@@ -56,8 +56,13 @@ const notificationSlice = createSlice({
       state.notifications.forEach(n => { n.isRead = true; });
       state.unreadCount = 0;
     },
+    clearApplicationNotificationsByOrderId(state, action: PayloadAction<string>) {
+      const orderId = action.payload;
+      state.notifications = state.notifications.filter(n => !(n.event === 'order.application.created' && n.orderId === orderId));
+      state.unreadCount = state.notifications.filter(n => !n.isRead).length;
+    },
   },
 });
 
-export const { addNotification, markAsRead, markAllAsRead } = notificationSlice.actions;
+export const { addNotification, markAsRead, markAllAsRead, clearApplicationNotificationsByOrderId } = notificationSlice.actions;
 export default notificationSlice.reducer;
