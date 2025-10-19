@@ -2,6 +2,8 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import * as express from 'express';
+import * as path from 'path';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -22,6 +24,10 @@ async function bootstrap() {
 
   // 全局前缀
   app.setGlobalPrefix('api');
+
+  // 静态文件：对外暴露 /uploads，用于头像与交付物预览/下载
+  const uploadsDir = path.join(process.cwd(), 'uploads');
+  app.use('/uploads', express.static(uploadsDir));
 
   // Swagger文档配置
   const config = new DocumentBuilder()

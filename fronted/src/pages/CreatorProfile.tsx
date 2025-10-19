@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Card, Form, Input, Upload, Button, Space, Tag, Row, Col, Statistic, message } from 'antd';
 import { PlusOutlined, ShoppingCartOutlined, StarOutlined } from '@ant-design/icons';
 import type { UploadProps } from 'antd';
-import http from '../store/api/http';
+import http, { resolveFileUrl } from '../store/api/http';
 
 const { TextArea } = Input;
 
@@ -45,14 +45,14 @@ const CreatorProfile: React.FC = () => {
   }, [fetchProfile]);
 
   const uploadProps: UploadProps = {
-    name: 'avatar',
+    name: 'file',
     listType: 'picture-card',
     showUploadList: false,
     beforeUpload: async (file) => {
       const formData = new FormData();
-      formData.append('avatar', file);
+      formData.append('file', file);
       try {
-        const { data } = await http.post('/upload/avatar', formData, {
+        const { data } = await http.post('/materials/upload-avatar', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
         form.setFieldsValue({ avatar: data.url });
@@ -96,7 +96,7 @@ const CreatorProfile: React.FC = () => {
               <Form.Item label="头像">
                 <Upload {...uploadProps}>
                   {profile?.avatar ? (
-                    <img src={profile.avatar} alt="avatar" style={{ width: '100%' }} />
+                    <img src={resolveFileUrl(profile.avatar)} alt="avatar" style={{ width: '100%' }} />
                   ) : (
                     <div>
                       <PlusOutlined />

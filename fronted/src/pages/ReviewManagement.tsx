@@ -40,7 +40,7 @@ const { Option } = Select;
 interface Review {
   id: string;
   rating: number;
-  content: string;
+  comment: string;
   reply: string;
   status: string;
   createdAt: string;
@@ -132,7 +132,7 @@ const ReviewManagement: React.FC = () => {
       if (target) {
         setSelectedReview(target);
         // 初始化表单为空评分与空内容，避免“关不掉”循环：仅打开一次后清参数
-        editForm.setFieldsValue({ rating: target.rating || undefined, content: target.content || '' });
+        editForm.setFieldsValue({ rating: target.rating || undefined, content: target.comment || '' });
         setEditModalVisible(true);
         const cleaned = new URLSearchParams(location.search);
         cleaned.delete('openReviewForOrder');
@@ -216,8 +216,8 @@ const ReviewManagement: React.FC = () => {
               {record.rating} 分
             </Text>
           </div>
-          <Text ellipsis={{ tooltip: record.content}}>
-            {record.content}
+          <Text ellipsis={{ tooltip: record.comment}}>
+            {record.comment}
           </Text>
         </div>
       ),
@@ -314,7 +314,7 @@ const ReviewManagement: React.FC = () => {
                   setSelectedReview(record);
                   editForm.setFieldsValue({
                     rating: record.rating,
-                    content: record.content,
+                    content: record.comment,
                     reply: record.reply,
                     status: record.status,
                   });
@@ -462,7 +462,7 @@ const ReviewManagement: React.FC = () => {
 
             <Text strong>评价内容：</Text>
             <div style={{ marginTop: 8, marginBottom: 16, padding: 12, background: '#f5f5f5', borderRadius: 6 }}>
-              <Text>{selectedReview.content}</Text>
+              <Text>{selectedReview.comment}</Text>
             </div>
 
             {selectedReview.reply && (

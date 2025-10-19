@@ -1,11 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as path from 'path';
 import * as fs from 'fs';
+import { NotificationsGateway } from '../communications/notifications.gateway';
 
 @Injectable()
 export class MaterialsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, @Inject(forwardRef(() => NotificationsGateway)) private notifications: NotificationsGateway) {}
 
   ensureDirExists(dir: string) {
     if (!fs.existsSync(dir)) {
@@ -31,6 +32,18 @@ export class MaterialsService {
         })
       )
     );
+    // 提交交付物后通知广告主（订单发布者）
+    try {
+      const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+      if (order?.customerId) {
+        this.notifications.notifyUser(order.customerId, 'order.deliverables.submitted', {
+          id: `deliverables-${orderId}-${Date.now()}`,
+          orderId,
+          count: created.length,
+          createdAt: new Date().toISOString(),
+        });
+      }
+    } catch {}
     return created;
   }
 

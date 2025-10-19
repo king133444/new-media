@@ -1,13 +1,14 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
 import { QueryReviewDto } from './dto/query-review.dto';
 import { ReviewStatus } from '@prisma/client';
+import { NotificationsGateway } from '../communications/notifications.gateway';
 
 @Injectable()
 export class ReviewsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, @Inject(forwardRef(() => NotificationsGateway)) private notifications: NotificationsGateway) {}
 
   // 创建评价
   async create(userId: string, createReviewDto: CreateReviewDto) {
@@ -50,7 +51,7 @@ export class ReviewsService {
       throw new BadRequestException('被评价者必须为该订单创作者');
     }
 
-    return this.prisma.review.create({
+    const review = await this.prisma.review.create({
       data: {
         ...createReviewDto,
         reviewerId: userId,
@@ -81,6 +82,18 @@ export class ReviewsService {
         },
       },
     });
+
+    // 通知被评价者（创作者/广告主）
+    try {
+      this.notifications.notifyUser(review.reviewee.id, 'review.created', {
+        id: review.id,
+        orderId: review.order.id,
+        reviewerId: review.reviewer.id,
+        createdAt: review.createdAt,
+      });
+    } catch {}
+
+    return review;
   }
 
   // 查询评价列表

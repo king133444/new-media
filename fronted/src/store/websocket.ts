@@ -86,7 +86,9 @@ export function connectWebSocket(token: string) {
       'order.application.accepted',
       'order.deliverables.submitted',
       'order.payout.released',
+      'order.cancelled.by.designer',
       'reviews.cta',
+      'review.created',
       'communication.message',
     ]);
     if (!notifyEvents.has(event)) return;
@@ -98,7 +100,9 @@ export function connectWebSocket(token: string) {
   socket.on('order.deliverables.submitted', handleEvent('order.deliverables.submitted'));
   socket.on('order.payout.released', handleEvent('order.payout.released'));
   socket.on('reviews.cta', handleEvent('reviews.cta'));
+  socket.on('order.cancelled.by.designer', handleEvent('order.cancelled.by.designer'));
   socket.on('communication.message', handleEvent('communication.message'));
+  socket.on('review.created', handleEvent('review.created'));
   socket.on('communication.message.sent', (payload: any) => {
     console.log('[WS<-]', 'communication.message.sent', payload);
     // 发送者确认不进入通知中心（避免铃铛噪音），但保留去重

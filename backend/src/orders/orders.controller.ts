@@ -106,6 +106,14 @@ export class OrdersController {
     return this.ordersService.cancelOrder(id, req.user.userId);
   }
 
+  @Post(':id/cancel-by-designer')
+  @ApiOperation({ summary: '取消订单（创作者/设计师）' })
+  @ApiResponse({ status: 200, description: '订单已取消并退款' })
+  @ApiResponse({ status: 400, description: '操作失败' })
+  cancelOrderByDesigner(@Request() req, @Param('id') id: string) {
+    return this.ordersService.cancelOrderByDesigner(id, req.user.userId);
+  }
+
   @Post(':id/deliverables')
   @ApiOperation({ summary: '提交交付物（创作者/设计者）' })
   @ApiResponse({ status: 201, description: '提交成功' })

@@ -230,7 +230,27 @@ export class OrdersService {
       throw new ForbiddenException("无权访问此订单");
     }
 
-    return order;
+    // 为申请人附加评价统计（被评价者=申请人），平均评分与数量
+    const apps = order.applications || [];
+    const enhancedApps = await Promise.all(
+      apps.map(async (app: any) => {
+        const stats = await this.prisma.review.aggregate({
+          _avg: { rating: true },
+          _count: { rating: true },
+          where: { revieweeId: app.userId },
+        });
+        return {
+          ...app,
+          user: {
+            ...app.user,
+            reviewsCount: stats._count.rating,
+            averageRating: Number((stats._avg.rating || 0).toFixed(2)),
+          },
+        };
+      })
+    );
+
+    return { ...order, applications: enhancedApps } as any;
   }
 
   // 更新订单（广告主）
@@ -650,6 +670,39 @@ export class OrdersService {
     }
     // 其他状态（已取消）默认不允许重复操作
     throw new BadRequestException("订单状态不允许此操作");
+  }
+
+  // 创作者/设计师取消订单：仅未完成、且自己为 designerId；需退款给广告主
+  async cancelOrderByDesigner(id: string, designerId: string) {
+    const order = await this.prisma.order.findUnique({ where: { id } });
+    if (!order) throw new NotFoundException('订单不存在');
+    if (order.designerId !== designerId) throw new ForbiddenException('无权取消此订单');
+    if (order.status === 'COMPLETED') throw new BadRequestException('订单已完成，无法取消');
+    if (order.status === 'CANCELLED') return { success: true };
+
+    // 退款：将金额退回广告主钱包，并记录 REFUND 交易
+    return this.prisma.$transaction(async (tx) => {
+      await tx.order.update({ where: { id }, data: { status: 'CANCELLED' as any } });
+      await tx.transaction.create({
+        data: {
+          amount: order.amount,
+          type: 'REFUND' as any,
+          status: 'COMPLETED' as any,
+          userId: order.customerId,
+          orderId: order.id,
+        },
+      });
+      await tx.user.update({ where: { id: order.customerId }, data: { walletBalance: { increment: order.amount } } });
+
+      // 通知广告主
+      this.notifications.notifyUser(order.customerId, 'order.cancelled.by.designer', {
+        id: `order-cancelled-${order.id}`,
+        orderId: order.id,
+        amount: order.amount,
+        createdAt: new Date().toISOString(),
+      });
+      return { success: true };
+    });
   }
 
   // 获取订单统计

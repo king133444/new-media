@@ -1,7 +1,7 @@
-import { Controller, Post, UseGuards, UseInterceptors, UploadedFiles, Body, Query, Request, Get, Param, Res } from '@nestjs/common';
+import { Controller, Post, UseGuards, UseInterceptors, UploadedFiles, UploadedFile, Body, Query, Request, Get, Param, Res, BadRequestException } from '@nestjs/common';
 import { MaterialsService } from './materials.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { AnyFilesInterceptor } from '@nestjs/platform-express';
+import { AnyFilesInterceptor, FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -39,6 +39,36 @@ export class MaterialsController {
     // 将上传的文件保存记录到数据库
     const created = await this.materialsService.saveUploadedFiles(req.user.userId, orderId as string, files || []);
     return created;
+  }
+
+  // 上传头像：保存到 /uploads/avatars，返回相对路径
+  @Post('upload-avatar')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: (req, file, cb) => {
+          const dest = path.join(process.cwd(), 'uploads', 'avatars');
+          fs.mkdirSync(dest, { recursive: true });
+          cb(null, dest);
+        },
+        filename: (req, file, cb) => {
+          const ext = path.extname(file.originalname);
+          const name = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9-_]/g, '_');
+          cb(null, `${name}-${Date.now()}${ext}`);
+        },
+      }),
+      limits: { fileSize: 5 * 1024 * 1024 },
+    })
+  )
+  async uploadAvatar(
+    @Request() req,
+    @UploadedFile() file: any,
+  ) {
+    if (!file) throw new BadRequestException('未选择文件');
+    const relativePath = `/uploads/avatars/${file.filename}`;
+    // 不直接落库，前端拿到 url 后通过 /auth/me PATCH avatar 字段
+    return { url: relativePath };
   }
 
   @Get(':id/preview')

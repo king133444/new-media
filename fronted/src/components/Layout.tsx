@@ -261,6 +261,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   navigate(`/orders?openOrder=${oid}&showDeliverables=1`);
                 } else if ((user?.role === 'CREATOR' || user?.role === 'DESIGNER') && n.event === 'order.payout.released') {
                   navigate('/creator/transactions');
+                } else if (user?.role === 'ADVERTISER' && n.event === 'order.cancelled.by.designer') {
+                  // 广告主收到创作者取消通知，跳到订单页
+                  navigate('/orders');
                 } else if (n.event === 'reviews.cta') {
                   // 广告主/创作者都跳到评价列表，由页面逻辑决定弹窗；为避免回弹，参数会在页面处理后清理
                   navigate('/reviews' + (oid ? ('?openReviewForOrder=' + oid) : ''));
@@ -304,10 +307,17 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                     </span>
                   );
                 }
+                if (n.event === 'order.cancelled.by.designer') {
+                  return (
+                    <span style={{ fontWeight: n.isRead ? 400 : 600 }}>
+                      对方取消了订单，钱款已原路返回
+                    </span>
+                  );
+                }
                 if (n.event === 'reviews.cta') {
                   return (
                     <span style={{ fontWeight: n.isRead ? 400 : 600 }}>
-                      订单完成，去完成双方评价吧
+                      订单完成，对本次交易做一个评价吧
                     </span>
                   );
                 }

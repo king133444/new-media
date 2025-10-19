@@ -2,8 +2,7 @@ import axios from 'axios';
 
 // 统一定义后端基础地址（包含 /api 前缀）
 // 可通过环境变量 REACT_APP_API_URL 覆盖，例如 http://192.168.1.10:3000/api
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://10.10.218.17:3000/api';
-console.log('url', API_BASE_URL);
+export const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://10.10.218.17:3000/api';
 
 export const http = axios.create({
   baseURL: API_BASE_URL,
@@ -40,5 +39,13 @@ http.interceptors.response.use(
 );
 
 export default http;
+
+// 将后端返回的相对路径转换为可访问的完整 URL；若本身为绝对 URL 则直接返回
+export function resolveFileUrl(pathOrUrl?: string | null): string | undefined {
+  if (!pathOrUrl) return undefined;
+  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+  const base = API_BASE_URL.replace(/\/api$/, '');
+  return `${base}${pathOrUrl.startsWith('/') ? pathOrUrl : '/' + pathOrUrl}`;
+}
 
 

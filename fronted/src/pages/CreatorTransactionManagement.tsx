@@ -24,6 +24,7 @@ interface TransactionStats {
   payments: { count: number; amount: number };
   refunds: { count: number; amount: number };
   walletBalance: number;
+  totalIncome: number;
 }
 
 const CreatorTransactionManagement: React.FC = () => {
@@ -50,7 +51,10 @@ const CreatorTransactionManagement: React.FC = () => {
   const fetchStats = async () => {
     try {
       const { data } = await http.get('/transactions/stats');
-      setStats(data);
+      // 累计收入 = 钱包余额 + 已提现金额
+      const walletBalance = data.walletBalance || 0;
+      const withdrawn = data.withdrawals?.amount || 0;
+      setStats({ ...data, payments: { ...data.payments }, walletBalance, totalIncome: walletBalance + withdrawn });
     } catch (e) {
       // ignore
     }
@@ -106,7 +110,7 @@ const CreatorTransactionManagement: React.FC = () => {
       <Row gutter={16} style={{ marginBottom: 24 }}>
         <Col span={8}>
           <Card>
-            <Statistic title="累计收入（佣金）" value={stats?.payments?.amount || 0} precision={2} prefix={<DollarOutlined />} suffix="元" />
+            <Statistic title="累计收入" value={stats?.totalIncome || 0} precision={2} prefix={<DollarOutlined />} suffix="元" />
           </Card>
         </Col>
         <Col span={8}>
