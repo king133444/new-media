@@ -105,4 +105,25 @@ export class OrdersController {
   cancelOrder(@Request() req, @Param('id') id: string) {
     return this.ordersService.cancelOrder(id, req.user.userId);
   }
+
+  @Post(':id/deliverables')
+  @ApiOperation({ summary: '提交交付物（创作者/设计者）' })
+  @ApiResponse({ status: 201, description: '提交成功' })
+  submitDeliverables(@Request() req, @Param('id') orderId: string, @Body() body: { files: Array<{ url: string; title?: string; description?: string; type?: string }> }) {
+    return this.ordersService.submitDeliverables(orderId, req.user.userId, body?.files || []);
+  }
+
+  @Get(':id/deliverables')
+  @ApiOperation({ summary: '查看交付物列表（双方可见）' })
+  @ApiResponse({ status: 200, description: '获取成功' })
+  getDeliverables(@Request() req, @Param('id') orderId: string) {
+    return this.ordersService.getDeliverables(orderId, req.user.userId, req.user.role);
+  }
+
+  @Post(':id/confirm-receipt')
+  @ApiOperation({ summary: '确认收货并放款（广告主）' })
+  @ApiResponse({ status: 200, description: '已确认收货并放款' })
+  confirmReceipt(@Request() req, @Param('id') orderId: string) {
+    return this.ordersService.confirmReceipt(orderId, req.user.userId);
+  }
 }

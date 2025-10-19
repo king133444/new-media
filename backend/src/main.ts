@@ -7,7 +7,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // 启用CORS
-  const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3001,http://localhost:8000')
+  const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:8000')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);

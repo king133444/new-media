@@ -9,7 +9,7 @@ try {
 } catch (e) {
   addNotification = () => ({ type: 'notification/addNotification', payload: {} });
 }
-const WS_HTTP_URL = process.env.REACT_APP_WS_HTTP_URL || 'http://10.10.218.17:3000/ws';
+const WS_HTTP_URL = process.env.REACT_APP_WS_HTTP_URL || 'http://localhost:3000/ws';
 let socket: Socket | null = null;
 let lastToken: string | null = null;
 type PendingListener = { event: string; handler: (payload: any) => void };
@@ -84,6 +84,9 @@ export function connectWebSocket(token: string) {
     const notifyEvents = new Set([
       'order.application.created',
       'order.application.accepted',
+      'order.deliverables.submitted',
+      'order.payout.released',
+      'reviews.cta',
       'communication.message',
     ]);
     if (!notifyEvents.has(event)) return;
@@ -92,6 +95,9 @@ export function connectWebSocket(token: string) {
 
   socket.on('order.application.created', handleEvent('order.application.created'));
   socket.on('order.application.accepted', handleEvent('order.application.accepted'));
+  socket.on('order.deliverables.submitted', handleEvent('order.deliverables.submitted'));
+  socket.on('order.payout.released', handleEvent('order.payout.released'));
+  socket.on('reviews.cta', handleEvent('reviews.cta'));
   socket.on('communication.message', handleEvent('communication.message'));
   socket.on('communication.message.sent', (payload: any) => {
     console.log('[WS<-]', 'communication.message.sent', payload);

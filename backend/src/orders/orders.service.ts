@@ -18,7 +18,14 @@ export class OrdersService {
 
   // 创建订单（广告主）
   async create(userId: string, createOrderDto: CreateOrderDto) {
-    return this.prisma.order.create({
+    // 托管：下单时从广告主余额中扣款并记录支付到平台（寄存）
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({ where: { id: userId }, select: { walletBalance: true } });
+      if (!user || user.walletBalance < createOrderDto.amount) {
+        throw new BadRequestException('余额不足，无法托管订单款项');
+      }
+      // 创建订单
+      const order = await tx.order.create({
       data: {
         ...createOrderDto,
         customerId: userId,
@@ -36,6 +43,24 @@ export class OrdersService {
           },
         },
       },
+      });
+
+      // 扣款并生成交易（PAYMENT，状态 COMPLETED 表示已托管到平台）
+      await tx.transaction.create({
+        data: {
+          amount: createOrderDto.amount,
+          type: 'PAYMENT' as any,
+          status: 'COMPLETED' as any,
+          userId,
+          orderId: order.id,
+        },
+      });
+      await tx.user.update({
+        where: { id: userId },
+        data: { walletBalance: { decrement: createOrderDto.amount } },
+      });
+
+      return order;
     });
   }
 
@@ -321,16 +346,138 @@ export class OrdersService {
       },
     });
 
-    // 通知订单发布者（广告主）
+    // 通知订单发布者（广告主）：统一负载结构并携带必要信息，便于前端格式化
     this.notifications.notifyUser(order.customerId, "order.application.created", {
+      id: application.id, // 用于前端去重
       orderId,
       applicationId: application.id,
-      applicantId: userId,
+      applicant: {
+        id: application.user.id,
+        username: application.user.username,
+        avatar: application.user.avatar,
+      },
+      order: { id: order.id, title: (order as any).title },
       message: applyOrderDto.message,
       createdAt: application.createdAt,
     });
 
     return application;
+  }
+
+  // 提交交付物（创作者）
+  async submitDeliverables(orderId: string, userId: string, files: Array<{ url: string; title?: string; description?: string; type?: string }>) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('订单不存在');
+    if (order.designerId !== userId) throw new ForbiddenException('仅受委派的创作者可提交交付物');
+
+    const created = await Promise.all((files || []).map((f) => this.prisma.material.create({
+      data: {
+        url: f.url,
+        title: f.title,
+        description: f.description,
+        type: (f.type as any) || 'OTHER',
+        status: 'ACTIVE' as any,
+        userId,
+        orderId,
+      },
+    })));
+
+    // 通知广告主有交付物提交
+    const ts = new Date().toISOString();
+    this.notifications.notifyUser(order.customerId, 'order.deliverables.submitted', {
+      id: `deliverables-${orderId}-${ts}`,
+      orderId,
+      count: created.length,
+      createdAt: ts,
+    });
+
+    return { success: true, files: created };
+  }
+
+  // 查看交付物列表（双方可见）
+  async getDeliverables(orderId: string, userId: string, role?: string) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('订单不存在');
+    if (role !== 'ADMIN' && order.customerId !== userId && order.designerId !== userId) {
+      throw new ForbiddenException('无权查看该订单交付物');
+    }
+    return this.prisma.material.findMany({
+      where: { orderId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        url: true,
+        title: true,
+        description: true,
+        type: true,
+        createdAt: true,
+        user: { select: { id: true, username: true, avatar: true } },
+      },
+    });
+  }
+
+  // 广告主确认收货并放款
+  async confirmReceipt(orderId: string, advertiserId: string) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('订单不存在');
+    if (order.customerId !== advertiserId) throw new ForbiddenException('无权确认该订单');
+    if (!order.designerId) throw new BadRequestException('尚未委派创作者');
+
+    // 平台到创作者放款（创建一条 COMMISSION 或 PAYMENT 给创作者）
+    return this.prisma.$transaction(async (tx) => {
+      // 这里按订单金额直接放款给创作者（可扩展平台抽佣）
+      await tx.transaction.create({
+        data: {
+          amount: order.amount,
+          type: 'COMMISSION' as any,
+          status: 'COMPLETED' as any,
+          userId: order.designerId,
+          orderId: order.id,
+        },
+      });
+
+      // 入账到创作者钱包
+      await tx.user.update({
+        where: { id: order.designerId },
+        data: { walletBalance: { increment: order.amount } },
+      });
+
+      // 更新订单状态
+      await tx.order.update({ where: { id: orderId }, data: { status: 'COMPLETED' as any } });
+
+      // 生成待评价记录（双方各一条，若已存在则跳过）
+      const existingAdvertiserReview = await tx.review.findFirst({ where: { orderId, reviewerId: advertiserId } });
+      if (!existingAdvertiserReview) {
+        await tx.review.create({
+          data: {
+            orderId,
+            reviewerId: advertiserId,
+            revieweeId: order.designerId!,
+            status: 'PENDING' as any,
+          },
+        });
+      }
+      const existingDesignerReview = await tx.review.findFirst({ where: { orderId, reviewerId: order.designerId! } });
+      if (!existingDesignerReview) {
+        await tx.review.create({
+          data: {
+            orderId,
+            reviewerId: order.designerId!,
+            revieweeId: advertiserId,
+            status: 'PENDING' as any,
+          },
+        });
+      }
+
+      // 通知创作者已放款
+      const ts = new Date().toISOString();
+      this.notifications.notifyUser(order.designerId, 'order.payout.released', { id: `payout-${orderId}-${ts}`, orderId, amount: order.amount, createdAt: ts });
+      // 提醒双方可进行评价
+      this.notifications.notifyUser(order.customerId, 'reviews.cta', { id: `reviews-cta-${orderId}`, orderId, createdAt: ts });
+      this.notifications.notifyUser(order.designerId, 'reviews.cta', { id: `reviews-cta-${orderId}`, orderId, createdAt: ts });
+
+      return { success: true };
+    });
   }
 
   // 接受申请（广告主）

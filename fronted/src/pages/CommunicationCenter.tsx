@@ -78,6 +78,10 @@ const CommunicationCenter: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const userAtBottomRef = useRef<boolean>(true);
+  const justSelectedRef = useRef<boolean>(false);
+  const justSentRef = useRef<boolean>(false);
 
   const { user } = useSelector((state: RootState) => state.auth);
   const location = useLocation();
@@ -136,20 +140,26 @@ const CommunicationCenter: React.FC = () => {
     try {
       const { data } = await http.get("/communications/online-users");
       setOnlineUsers(data);
-      wsEmit("online.query");
     } catch (error) {
       console.error("获取联系人失败:", error);
     }
   }, []);
 
   // 获取与特定用户的对话
-  const fetchMessages = async (contactId: string) => {
+  // 支持向上加载更多：传入 before 时间戳增量加载
+  const fetchMessages = async (contactId: string, before?: string) => {
     setLoading(true);
     try {
-      const { data } = await http.get(
-        `/communications/conversations/${contactId}`
-      );
-      setMessages(data);
+      const url = before
+        ? `/communications/conversations/${contactId}?limit=20&before=${encodeURIComponent(before)}`
+        : `/communications/conversations/${contactId}?limit=20`;
+      const { data } = await http.get(url);
+      if (before) {
+        // 向上插入，不打乱现有顺序
+        setMessages(prev => [...data, ...prev]);
+      } else {
+        setMessages(data);
+      }
     } catch (error) {
       message.error("获取消息失败");
     } finally {
@@ -167,6 +177,7 @@ const CommunicationCenter: React.FC = () => {
         receiverId: selectedContact.id,
         type: "MESSAGE",
       });
+      justSentRef.current = true;
       setNewMessage("");
     } catch (error) {
       message.error("发送失败");
@@ -178,6 +189,7 @@ const CommunicationCenter: React.FC = () => {
   // 选择联系人
   const selectContact = useCallback((contact: any) => {
     setSelectedContact(contact);
+    justSelectedRef.current = true;
     fetchMessages(contact.id);
     // 滚动到底部
     setTimeout(() => {
@@ -245,22 +257,31 @@ const CommunicationCenter: React.FC = () => {
     userRef.current = user;
   }, [user]);
 
+  // 消息变化时：在三种场景自动滚动到底部
+  // 1) 用户当前接近底部（正常会话） 2) 刚选择联系人 3) 刚发送消息
+  useEffect(() => {
+    const shouldScroll = userAtBottomRef.current || justSelectedRef.current || justSentRef.current;
+    if (!shouldScroll) return;
+    const timer = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      justSelectedRef.current = false;
+      justSentRef.current = false;
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [messages]);
+
+  // 监听滚动，计算是否接近底部，避免用户上滑时被强制拉回
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const threshold = 80; // px
+    userAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+  }, []);
+
+  // 首次加载：拉取会话/联系人并绑定 WS 监听，只在初始运行
   useEffect(() => {
     fetchConversations();
     fetchContacts();
-    // 解析路由中的 contactId，自动打开对应会话
-    const params = new URLSearchParams(location.search);
-    const contactId = params.get("contactId");
-    if (contactId) {
-      const found = onlineUsers.find((u) => u.id === contactId);
-      if (found) {
-        selectContact(found);
-      } else {
-        // 若不在在线列表，尝试从会话列表中找到联系人
-        const conv = conversations.find((c) => c.contact.id === contactId);
-        if (conv) selectContact(conv.contact);
-      }
-    }
 
     const onMessage = (payload: any) => {
       const sc = selectedContactRef.current;
@@ -351,16 +372,22 @@ const CommunicationCenter: React.FC = () => {
       wsOff("communication.message.sent", onMessageSent);
       wsOff("online.changed", onOnline);
     };
-    // 说明：此 effect 仅用于初次加载和路由变化时解析 contactId 并绑定监听，不依赖 conversations/onlineUsers 动态变化
-  }, [
-    fetchConversations,
-    fetchContacts,
-    location.search,
-    onlineUsers,
-    selectContact,
-    conversations,
-    upsertConversation,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 当路由或数据列表变动时，根据 contactId 定位联系人，不触发重新拉取接口
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const contactId = params.get("contactId");
+    if (!contactId) return;
+    const found = onlineUsers.find((u) => u.id === contactId);
+    if (found) {
+      selectContact(found);
+      return;
+    }
+    const conv = conversations.find((c) => c.contact.id === contactId);
+    if (conv) selectContact(conv.contact);
+  }, [location.search, onlineUsers, conversations, selectContact]);
 
   // 本页不再通过通知重复刷新，避免重复拉取与重复渲染
 
@@ -504,7 +531,25 @@ const CommunicationCenter: React.FC = () => {
                     maxHeight: "calc(100vh - 350px)",
                     backgroundColor: "#fafafa",
                   }}
+                  ref={scrollContainerRef}
+                  onScroll={handleScroll}
                 >
+                  {/* 上拉加载更多 */}
+                  {messages.length >= 20 && (
+                    <div style={{ textAlign: 'center', marginBottom: 8 }}>
+                      <Button
+                        size="small"
+                        onClick={() => {
+                          if (!messages.length) return;
+                          const first = messages[0];
+                          fetchMessages(selectedContact.id, first.createdAt);
+                        }}
+                        loading={loading}
+                      >
+                        加载更早消息
+                      </Button>
+                    </div>
+                  )}
                   {loading ? (
                     <div style={{ textAlign: "center", padding: "40px 0" }}>
                       <Text type="secondary">加载中...</Text>

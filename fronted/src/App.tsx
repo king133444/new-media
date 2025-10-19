@@ -24,6 +24,7 @@ import OrderPlaza from './pages/OrderPlaza';
 import PortfolioManagement from './pages/PortfolioManagement';
 import { connectWebSocket } from './store/websocket';
 import CreatorProfile from './pages/CreatorProfile';
+import CreatorTransactionManagement from './pages/CreatorTransactionManagement';
 
 const App: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -68,6 +69,7 @@ const App: React.FC = () => {
                 <Route path="/recommendations" element={<ContentRecommendation />} />
                 <Route path="/advertiser/profile" element={<AdvertiserProfile />} />
                 <Route path="/creator/profile" element={<CreatorProfile />} />
+                <Route path="/creator/transactions" element={<CreatorTransactionManagement />} />
                 <Route path="/advertiser/ads" element={<AdvertiserAdManagement />} />
                 <Route path="/advertiser/transactions" element={<AdvertiserTransactionManagement />} />
                 <Route path="/orders/plaza" element={<OrderPlaza />} />

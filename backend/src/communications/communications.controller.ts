@@ -47,8 +47,10 @@ export class CommunicationsController {
   @Get('conversations/:contactId')
   @ApiOperation({ summary: '获取与特定用户的对话' })
   @ApiResponse({ status: 200, description: '获取成功' })
-  getConversationWithUser(@Request() req, @Param('contactId') contactId: string) {
-    return this.communicationsService.getConversationWithUser(req.user.userId, contactId);
+  getConversationWithUser(@Request() req, @Param('contactId') contactId: string, @Query('limit') limit?: string, @Query('before') before?: string) {
+    const parsedLimit = Math.min(Math.max(parseInt(limit || '20', 10) || 20, 1), 100);
+    const beforeDate = before ? new Date(before) : undefined;
+    return this.communicationsService.getConversationWithUser(req.user.userId, contactId, parsedLimit, beforeDate);
   }
 
   @Get('unread-count')

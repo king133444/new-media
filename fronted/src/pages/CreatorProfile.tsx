@@ -14,6 +14,9 @@ interface CreatorProfileData {
   bio?: string;
   skills?: string[];
   tags?: string[];
+  paymentAccount?: string;
+  averageRating?: number;
+  participatedOrders?: number;
   createdAt: string;
 }
 
@@ -25,7 +28,9 @@ const CreatorProfile: React.FC = () => {
 
   const fetchProfile = useCallback(async () => {
     try {
-      const { data } = await http.get('/users/me');
+      const me = await http.get('/auth/me');
+      const id = me.data?.id;
+      const { data } = await http.get(`/users/profile/${id}`);
       setProfile(data);
       setSkills(data.skills || []);
       setTags(data.tags || []);
@@ -62,7 +67,7 @@ const CreatorProfile: React.FC = () => {
 
   const handleSave = async (values: any) => {
     try {
-      await http.put('/users/me', values);
+      await http.patch('/auth/me', values);
       message.success('保存成功');
       fetchProfile();
     } catch (e) {
@@ -85,6 +90,9 @@ const CreatorProfile: React.FC = () => {
               <Form.Item name="bio" label="个人简介">
                 <TextArea rows={4} placeholder="请输入个人简介" />
               </Form.Item>
+              <Form.Item name="paymentAccount" label="收款账户">
+                <Input placeholder="请输入你的收款账户" />
+              </Form.Item>
               <Form.Item label="头像">
                 <Upload {...uploadProps}>
                   {profile?.avatar ? (
@@ -103,10 +111,19 @@ const CreatorProfile: React.FC = () => {
         <Col span={8}>
           <Card title="关键指标">
             <Space direction="vertical" style={{ width: '100%' }}>
-              <Statistic title="参与订单" value={profile ? 0 : 0} prefix={<ShoppingCartOutlined />} />
-              <Statistic title="平均评分" value={0} precision={1} prefix={<StarOutlined />} />
+              <Statistic title="参与订单" value={profile?.participatedOrders || 0} prefix={<ShoppingCartOutlined />} />
+              <Statistic title="平均评分" value={profile?.averageRating || 0} precision={1} prefix={<StarOutlined />} />
             </Space>
           </Card>
+          {skills && skills.length > 0 && (
+            <Card title="技能" style={{ marginTop: 16 }}>
+              <Space wrap>
+                {skills.map(s => (
+                  <Tag key={s} color="green">{s}</Tag>
+                ))}
+              </Space>
+            </Card>
+          )}
           {tags && tags.length > 0 && (
             <Card title="标签" style={{ marginTop: 16 }}>
               <Space wrap>
@@ -116,6 +133,11 @@ const CreatorProfile: React.FC = () => {
               </Space>
             </Card>
           )}
+          <Card title="账户信息" style={{ marginTop: 16 }}>
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <div>支付账户：{profile?.paymentAccount || '-'}</div>
+            </Space>
+          </Card>
         </Col>
       </Row>
     </div>

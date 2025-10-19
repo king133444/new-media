@@ -115,5 +115,55 @@ export class UsersService {
       where: { id },
     });
   }
+
+  async getProfile(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        role: true,
+        avatar: true,
+        status: true,
+        bio: true,
+        skills: true,
+        tags: true,
+        paymentAccount: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    if (!user) throw new NotFoundException('用户不存在');
+
+    const [asCustomer, asDesigner, avgRating] = await Promise.all([
+      this.prisma.order.count({ where: { customerId: userId } }),
+      this.prisma.order.count({ where: { designerId: userId } }),
+      this.prisma.review.aggregate({
+        _avg: { rating: true },
+        where: { revieweeId: userId },
+      }),
+    ]);
+
+    const participatedOrders = asCustomer + asDesigner;
+
+    return {
+      ...user,
+      skills: safeParseArray(user.skills),
+      tags: safeParseArray(user.tags),
+      averageRating: avgRating._avg.rating || 0,
+      participatedOrders,
+    } as any;
+  }
+}
+
+function safeParseArray(input?: string | null): string[] | undefined {
+  if (!input) return undefined;
+  try {
+    const v = JSON.parse(input);
+    return Array.isArray(v) ? v : undefined;
+  } catch {
+    return undefined;
+  }
 }
 

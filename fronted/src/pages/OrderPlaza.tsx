@@ -59,7 +59,7 @@ interface Order {
     company: string;
   };
   _count: {
-    applications: number;
+    applications: string[];
   };
 }
 
@@ -532,7 +532,7 @@ const OrderPlaza: React.FC = () => {
               </Text>
               <div style={{ marginTop: 8 }}>
                 <Text type="secondary">
-                  已有 {selectedOrder._count.applications} 位创作者申请
+                  已有 {selectedOrder.applications?.length || 0} 位创作者申请
                 </Text>
               </div>
             </div>

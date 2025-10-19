@@ -18,7 +18,7 @@ export class UpdateReviewDto {
   @ApiProperty({ description: '评价内容', required: false })
   @IsOptional()
   @IsString()
-  content?: string;
+  comment?: string;
 
   @ApiProperty({ description: '回复内容', required: false })
   @IsOptional()

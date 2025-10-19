@@ -169,11 +169,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           icon: <FileImageOutlined />,
           label: '作品集管理',
         },
-        {
-          key: '/transactions',
-          icon: <DollarOutlined />,
-          label: '交易管理',
-        },
+        { key: '/creator/transactions', icon: <DollarOutlined />, label: '交易管理' },
         {
           key: '/communication',
           icon: <MessageOutlined />,
@@ -250,17 +246,83 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               // 聊天消息跳转到交流中心（若有 fromUserId 则附带 contactId）
               if (n.event === 'communication.message' && n.fromUserId) {
                 navigate(`/communication?contactId=${n.fromUserId}`);
-              } else if (n.event === 'order.application.created' || n.event === 'order.application.accepted' || n.orderId) {
-                navigate('/orders');
+              } else if (n.event === 'order.application.created' || n.event === 'order.application.accepted' || n.orderId || n.event === 'order.deliverables.submitted' || n.event === 'order.payout.released' || n.event === 'reviews.cta') {
+                const oid = n.orderId || (n as any).order?.id;
+                // 身份判断：
+                // - 广告主收到“申请”→ 打开申请/委派弹窗
+                // - 提交交付物 → 广告主自动打开订单详情与交付物列表
+                // - 放款通知 → 创作者跳转订单页
+                // - 评价提醒 → 双方跳转评价页
+                if (user?.role === 'ADVERTISER' && n.event === 'order.application.created' && oid) {
+                  // 强制刷新 + 打开委派（由订单页 effect 清理参数）
+                  navigate(`/orders?openApplicationsFor=${oid}`);
+                } else if (user?.role === 'ADVERTISER' && n.event === 'order.deliverables.submitted' && oid) {
+                  // 强制刷新 + 打开详情与交付物（由订单页 effect 清理参数）
+                  navigate(`/orders?openOrder=${oid}&showDeliverables=1`);
+                } else if ((user?.role === 'CREATOR' || user?.role === 'DESIGNER') && n.event === 'order.payout.released') {
+                  navigate('/creator/transactions');
+                } else if (n.event === 'reviews.cta') {
+                  // 广告主/创作者都跳到评价列表，由页面逻辑决定弹窗；为避免回弹，参数会在页面处理后清理
+                  navigate('/reviews' + (oid ? ('?openReviewForOrder=' + oid) : ''));
+                } else {
+                  navigate('/orders');
+                }
               }
             }}
             style={{ cursor: 'pointer', background: n.isRead ? 'transparent' : '#f6ffed' }}
           >
             <List.Item.Meta
-              title={<span style={{ fontWeight: n.isRead ? 400 : 600 }}>{n.message || n.event}</span>}
+              title={(() => {
+                if (n.event === 'order.application.created') {
+                  const applicant = (n as any).applicant?.username || (n as any).fromUserName || '创作者';
+                  const title = (n as any).order?.title;
+                  return (
+                    <span style={{ fontWeight: n.isRead ? 400 : 600 }}>
+                      收到1条申请：{applicant}{title ? ` 申请订单《${title}》` : ''}
+                    </span>
+                  );
+                }
+                if (n.event === 'order.application.accepted') {
+                  const title = (n as any).order?.title;
+                  return (
+                    <span style={{ fontWeight: n.isRead ? 400 : 600 }}>
+                      申请已被接受{title ? `：订单《${title}》` : ''}
+                    </span>
+                  );
+                }
+                if (n.event === 'order.deliverables.submitted') {
+                  return (
+                    <span style={{ fontWeight: n.isRead ? 400 : 600 }}>
+                      创作者提交了交付物，请验收
+                    </span>
+                  );
+                }
+                if (n.event === 'order.payout.released') {
+                  return (
+                    <span style={{ fontWeight: n.isRead ? 400 : 600 }}>
+                      平台已向你发放酬劳
+                    </span>
+                  );
+                }
+                if (n.event === 'reviews.cta') {
+                  return (
+                    <span style={{ fontWeight: n.isRead ? 400 : 600 }}>
+                      订单完成，去完成双方评价吧
+                    </span>
+                  );
+                }
+                if (n.event === 'communication.message') {
+                  return (
+                    <span style={{ fontWeight: n.isRead ? 400 : 600 }}>
+                      新消息：{n.message}
+                    </span>
+                  );
+                }
+                return <span style={{ fontWeight: n.isRead ? 400 : 600 }}>{n.message || n.event}</span>;
+              })()}
               description={
                 <span style={{ color: '#999', fontSize: 12 }}>
-                  {n.orderId ? `订单ID: ${n.orderId} · ` : ''}
+                  {(n.orderId || (n as any).order?.id) ? `订单ID: ${n.orderId || (n as any).order?.id} · ` : ''}
                   {new Date(n.createdAt).toLocaleString()}
                 </span>
               }

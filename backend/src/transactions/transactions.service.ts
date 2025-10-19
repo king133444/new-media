@@ -293,7 +293,7 @@ export class TransactionsService {
       where.userId = userId;
     }
 
-    const [total, deposits, withdrawals, payments, refunds] = await Promise.all([
+    const [total, deposits, withdrawals, payments, refunds, wallet] = await Promise.all([
       this.prisma.transaction.count({ where }),
       this.prisma.transaction.aggregate({
         where: { ...where, type: TransactionType.DEPOSIT, status: TransactionStatus.COMPLETED },
@@ -315,6 +315,7 @@ export class TransactionsService {
         _sum: { amount: true },
         _count: { id: true },
       }),
+      this.prisma.user.findUnique({ where: { id: userId }, select: { walletBalance: true } }),
     ]);
 
     return {
@@ -335,6 +336,7 @@ export class TransactionsService {
         count: refunds._count.id,
         amount: refunds._sum.amount || 0,
       },
+      walletBalance: wallet?.walletBalance || 0,
     };
   }
 }

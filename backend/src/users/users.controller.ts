@@ -35,6 +35,14 @@ export class UsersController {
     return this.usersService.findById(id);
   }
 
+  @Get('profile/:id')
+  @ApiOperation({ summary: '获取用户资料（技能、标签、评分、支付账户、简介、参与订单数）' })
+  @ApiResponse({ status: 200, description: '获取成功' })
+  @ApiResponse({ status: 404, description: '用户不存在' })
+  getProfile(@Param('id') id: string) {
+    return this.usersService.getProfile(id);
+  }
+
   @Patch(':id')
   @ApiOperation({ summary: '更新用户信息' })
   @ApiResponse({ status: 200, description: '更新成功' })

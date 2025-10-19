@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Card,
   Table,
@@ -76,6 +77,9 @@ const ReviewManagement: React.FC = () => {
     type: 'all', // all, given, received
   });
 
+  const location = useLocation();
+  const navigate = useNavigate();
+
   const { user } = useSelector((state: RootState) => state.auth);
 
   // 获取评价列表
@@ -117,6 +121,28 @@ const ReviewManagement: React.FC = () => {
     fetchReviews();
     fetchStats();
   }, [fetchReviews, fetchStats]);
+
+  // 处理从铃铛过来的“去评价”入口：根据订单定位待评价记录并打开编辑弹窗
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const orderId = params.get('openReviewForOrder');
+    if (!orderId) return;
+    const open = () => {
+      const target = reviews.find(r => r.order.id === orderId && (r.status === 'PENDING' || !r.rating));
+      if (target) {
+        setSelectedReview(target);
+        // 初始化表单为空评分与空内容，避免“关不掉”循环：仅打开一次后清参数
+        editForm.setFieldsValue({ rating: target.rating || undefined, content: target.content || '' });
+        setEditModalVisible(true);
+        const cleaned = new URLSearchParams(location.search);
+        cleaned.delete('openReviewForOrder');
+        navigate({ pathname: '/reviews', search: cleaned.toString() ? `?${cleaned.toString()}` : '' }, { replace: true });
+      }
+    };
+    // 若列表尚未加载完，延时尝试一次
+    const t = setTimeout(open, 50);
+    return () => clearTimeout(t);
+  }, [location.search, reviews, editForm, navigate]);
 
   // （移除未使用的单独状态更新方法，状态更新通过编辑表单一并提交）
 
@@ -531,19 +557,19 @@ const ReviewManagement: React.FC = () => {
           </Form.Item>
 
           <Form.Item
-            name="content"
+            name="comment"
             label="评价内容"
             rules={[{ required: true, message: '请输入评价内容' }]}
           >
             <TextArea rows={4} placeholder="请输入评价内容" />
           </Form.Item>
 
-          <Form.Item
+          {/* <Form.Item
             name="reply"
             label="回复内容"
           >
             <TextArea rows={3} placeholder="请输入回复内容（可选）" />
-          </Form.Item>
+          </Form.Item> */}
 
           {user?.role === 'ADMIN' && (
             <Form.Item

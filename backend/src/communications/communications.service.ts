@@ -183,15 +183,19 @@ export class CommunicationsService {
   }
 
   // 获取与特定用户的对话
-  async getConversationWithUser(userId: string, contactId: string) {
-    // 仅返回最新的 10 条，按时间升序给前端渲染
+  async getConversationWithUser(userId: string, contactId: string, limit: number = 20, before?: Date) {
+    // 支持向上滚动增量加载：查询 before 之前的消息，默认取最新 limit 条
+    const whereBase: any = {
+      OR: [
+        { senderId: userId, receiverId: contactId },
+        { senderId: contactId, receiverId: userId },
+      ],
+    };
+    if (before) {
+      whereBase.createdAt = { lt: before };
+    }
     const latest = await this.prisma.communication.findMany({
-      where: {
-        OR: [
-          { senderId: userId, receiverId: contactId },
-          { senderId: contactId, receiverId: userId },
-        ],
-      },
+      where: whereBase,
       include: {
         sender: {
           select: { id: true, username: true, avatar: true, role: true },
@@ -201,7 +205,7 @@ export class CommunicationsService {
         },
       },
       orderBy: { createdAt: 'desc' },
-      take: 10,
+      take: limit,
     });
     const messages = latest.reverse();
 

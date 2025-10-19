@@ -41,6 +41,29 @@
 
 ---
 
+## 最近更新（重要）
+
+- 评价管理
+  - 仅展示“与我有关”的评价（我给出的/我收到的）；管理员可查看全部。
+  - 订单确认收货后，系统为双方各生成一条“待评价”记录（PENDING），铃铛“去评价”直达 `/reviews?openReviewForOrder=<orderId>` 并只弹一次编辑弹窗。
+
+- 交易管理
+  - 创作者交易页路径：`/creator/transactions`（侧边菜单已更新）。
+  - 统计接口 `GET /transactions/stats` 返回 `walletBalance`，页面展示“钱包余额/累计收入/已提现”。
+  - 放款通知（`order.payout.released`）创作者点击直达创作者交易页。
+
+- 交流中心（聊天）
+  - 消息分页：接口 `GET /communications/conversations/:contactId?limit=20&before=<ISO>`，默认 20 条，支持向上加载更多。
+  - 前端顶部“加载更早消息”向上插入，保持滚动体验；仅在用户位于底部/刚选联系人/刚发送时自动滚底，避免阅读历史时被打断。
+
+- 铃铛通知跳转
+  - 申请 → 广告主直达 `/orders?openApplicationsFor=<orderId>`；订单页处理后清理参数，避免重复弹出。
+  - 交付物提交 → 广告主直达 `/orders?openOrder=<orderId>&showDeliverables=1`（自动打开详情与交付物列表），参数用后即清。
+  - 放款 → 创作者直达 `/creator/transactions`。
+  - 去评价 → 双方直达 `/reviews?openReviewForOrder=<orderId>`，页面定位待评价并只弹一次。
+
+---
+
 ## 本地运行
 
 ### 1 分开配置环境变量（推荐）
@@ -83,7 +106,7 @@ yarn start:dev
 cd fronted
 yarn install
 yarn start
-# 默认运行于 http://localhost:3000 或 3001（取决于你的环境）；API/WS 取自 fronted/.env
+# 运行于 http://localhost:8000 （/fronted/.env可修改）；API/WS 取自 fronted/.env
 ```
 
 > 提示：首次运行请确保数据库已创建，且 .env 中的 `DATABASE_URL` 正确。

@@ -91,7 +91,7 @@ export class ReviewsService {
 
     const where: any = {};
 
-    // 根据角色过滤评价
+    // 只显示“与我有关”的评价：我给出的 or 我收到的
     if (role === 'ADVERTISER' || role === 'CREATOR' || role === 'DESIGNER') {
       where.OR = [
         { reviewerId: userId },
@@ -103,8 +103,8 @@ export class ReviewsService {
     if (keyword) {
       where.OR = [
         ...(where.OR || []),
-        { content: { contains: keyword } },
-        { reply: { contains: keyword } },
+        { comment: { contains: keyword } },
+        // { reply: { contains: keyword } },
       ];
     }
 
@@ -222,7 +222,7 @@ export class ReviewsService {
     } else if (review.reviewerId === userId) {
       // 评价者可以更新评价内容和评分
       if (updateReviewDto.rating !== undefined) updateData.rating = updateReviewDto.rating;
-      if (updateReviewDto.content !== undefined) updateData.content = updateReviewDto.content;
+      if (updateReviewDto.comment !== undefined) updateData.comment = updateReviewDto.comment;
     } else if (review.revieweeId === userId) {
       // 被评价者只能添加回复
       if (updateReviewDto.reply !== undefined) updateData.reply = updateReviewDto.reply;

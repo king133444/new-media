@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Table, Button, Space, Tag, Modal, Form, Input, Select, DatePicker, InputNumber, message, List, Avatar } from 'antd';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Table, Button, Space, Tag, Modal, Form, Input, Select, DatePicker, InputNumber, message, List, Avatar, Drawer, Card, Typography, Upload } from 'antd';
 import { PlusOutlined, EditOutlined, EyeOutlined, CloseOutlined } from '@ant-design/icons';
 import http from '../store/api/http';
 import dayjs from 'dayjs';
@@ -16,8 +17,14 @@ const OrderManagement: React.FC = () => {
   const [filters, setFilters] = useState<{ status?: string; type?: string; keyword?: string }>({});
   const [appModalVisible, setAppModalVisible] = useState(false);
   const [appModalOrder, setAppModalOrder] = useState<any | null>(null);
+  const [viewVisible, setViewVisible] = useState(false);
+  const [viewOrder, setViewOrder] = useState<any | null>(null);
+  const [deliverFiles, setDeliverFiles] = useState<any[]>([]);
+  const [submittingDeliver, setSubmittingDeliver] = useState(false);
 
   const { user } = useSelector((state: RootState) => state.auth);
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -48,6 +55,103 @@ const OrderManagement: React.FC = () => {
     fetchOrders();
   }, [fetchOrders]);
 
+  // 根据 URL 参数自动打开“申请/委派”抽屉
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const orderId = params.get('openApplicationsFor');
+    if (!orderId) return;
+    const order = orders.find(o => o.id === orderId);
+    if (order) {
+      // 防止重复打开：仅当当前未打开或订单变化时打开
+      if (!appModalVisible || appModalOrder?.id !== order.id) {
+        // 强制刷新一次数据，避免页面上申请数仍为 0
+        fetchOrders();
+        openApplications(order);
+      }
+    }
+    // 处理完后移除参数，防止反复触发
+    const cleaned = new URLSearchParams(location.search);
+    cleaned.delete('openApplicationsFor');
+    if (cleaned.toString() !== location.search.replace(/^\?/, '')) {
+      navigate({ pathname: '/orders', search: cleaned.toString() ? `?${cleaned.toString()}` : '' }, { replace: true });
+    }
+  }, [orders, appModalVisible, appModalOrder, location.search, fetchOrders, navigate]);
+
+  // 根据 URL 参数自动打开订单详情 Drawer 及交付物列表
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const openOrderId = params.get('openOrder');
+    const showDeliverables = params.get('showDeliverables');
+    if (!openOrderId) return;
+    const order = orders.find(o => o.id === openOrderId);
+    if (!order) return;
+    if (!viewVisible || viewOrder?.id !== order.id) {
+      // 确保数据刷新
+      fetchOrders();
+      handleView(order);
+    }
+    if (showDeliverables === '1') {
+      // 打开交付物列表
+      (async () => {
+        try {
+          const { data } = await http.get(`/orders/${order.id}/deliverables`);
+          Modal.info({
+            title: '交付物列表',
+            width: 700,
+            content: (
+              <List
+                dataSource={data || []}
+                renderItem={(item: any) => (
+                  <List.Item>
+                    <List.Item.Meta
+                      avatar={<Avatar src={item.user?.avatar} />}
+                      title={<a href={item.url} target="_blank" rel="noreferrer">{item.title || item.url}</a>}
+                      description={item.description || item.type}
+                    />
+                    <div>{dayjs(item.createdAt).format('YYYY-MM-DD HH:mm')}</div>
+                  </List.Item>
+                )}
+                locale={{ emptyText: '暂无交付物' }}
+              />
+            ),
+          });
+        } catch {}
+      })();
+    }
+    // 清理参数，防止重复弹出
+    const cleaned = new URLSearchParams(location.search);
+    cleaned.delete('openOrder');
+    cleaned.delete('showDeliverables');
+    if (cleaned.toString() !== location.search.replace(/^\?/, '')) {
+      navigate({ pathname: '/orders', search: cleaned.toString() ? `?${cleaned.toString()}` : '' }, { replace: true });
+    }
+  }, [orders, viewVisible, viewOrder, location.search, fetchOrders, navigate]);
+
+  // Tag helpers（与广场页风格一致）
+  const getTypeTag = (type: string) => {
+    const typeMap: { [key: string]: { color: string; text: string } } = {
+      VIDEO: { color: 'purple', text: '视频' },
+      DESIGN: { color: 'cyan', text: '设计' },
+      H5: { color: 'blue', text: 'H5' },
+      ANIMATION: { color: 'orange', text: '动画' },
+      AUDIO: { color: 'green', text: '音频' },
+      OTHER: { color: 'default', text: '其他' },
+    };
+    const config = typeMap[type] || { color: 'default', text: type };
+    return <Tag color={config.color}>{config.text}</Tag>;
+  };
+
+  const getPriorityTag = (priority: string) => {
+    const priorityMap: { [key: string]: { color: string; text: string } } = {
+      LOW: { color: 'green', text: '低' },
+      MEDIUM: { color: 'blue', text: '中' },
+      HIGH: { color: 'orange', text: '高' },
+      URGENT: { color: 'red', text: '紧急' },
+    };
+    const config = priorityMap[priority] || { color: 'default', text: priority };
+    return <Tag color={config.color}>{config.text}</Tag>;
+  };
+
   const columns = [
     {
       title: '订单ID',
@@ -58,7 +162,7 @@ const OrderManagement: React.FC = () => {
     {
       title: '申请数',
       key: 'applications',
-      render: (_: any, record: any) => (record.applications?.length ?? 0),
+      render: (_: any, record: any) => (record._count.applications ?? '-'),
     },
     {
       title: '订单标题',
@@ -175,9 +279,12 @@ const OrderManagement: React.FC = () => {
   };
 
   const handleEdit = (order: any) => {
+    
     setEditingOrder(order);
     form.setFieldsValue({
       title: order.title,
+      customer: order.customer.username ?? '-',
+      designer: order.designer.username ?? '-',
       amount: order.amount,
       type: order.type,
       priority: order.priority,
@@ -187,24 +294,8 @@ const OrderManagement: React.FC = () => {
   };
 
   const handleView = (order: any) => {
-    console.log('order', order);
-  
-    Modal.info({
-      title: '订单详情',
-      content: (
-        <div>
-          <p><strong>订单ID:</strong> {order.id}</p>
-          <p><strong>标题:</strong> {order.title}</p>
-          <p><strong>客户:</strong> {order.customer?.username || '-'}</p>
-          <p><strong>设计师:</strong> {order.designer?.username || '-'}</p>
-          <p><strong>类型:</strong> {order.type}</p>
-          <p><strong>金额:</strong> ¥{order.amount}</p>
-          <p><strong>状态:</strong> {order.status}</p>
-          <p><strong>截止日期:</strong> {order.deadline}</p>
-        </div>
-      ),
-      width: 600,
-    });
+    setViewOrder(order);
+    setViewVisible(true);
   };
   
 
@@ -331,6 +422,184 @@ const OrderManagement: React.FC = () => {
         }}
       />
 
+      {/* 查看详情 - 卡片化布局 */}
+      <Drawer
+        title={viewOrder ? `订单详情：${viewOrder.title}` : '订单详情'}
+        open={viewVisible}
+        onClose={() => setViewVisible(false)}
+        width={720}
+      >
+        {viewOrder && (
+          <Space direction="vertical" style={{ width: '100%' }} size={16}>
+            <Card>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 600 }}>{viewOrder.title}</div>
+                  <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {getTypeTag(viewOrder.type)}
+                    {getPriorityTag(viewOrder.priority)}
+                    <Tag color="blue">金额 ¥{Number(viewOrder.amount || 0).toFixed(2)}</Tag>
+                    {viewOrder.budget ? (<Tag color="geekblue">预算 ¥{Number(viewOrder.budget).toFixed(2)}</Tag>) : null}
+                    <Tag color={viewOrder.status === 'PENDING' ? 'orange' : viewOrder.status === 'IN_PROGRESS' ? 'blue' : viewOrder.status === 'COMPLETED' ? 'green' : 'red'}>
+                      {viewOrder.status}
+                    </Tag>
+                    {viewOrder.deadline && (
+                      <Tag>{dayjs(viewOrder.deadline).format('MM-DD HH:mm')}</Tag>
+                    )}
+                    <Tag>申请数 {viewOrder._count?.applications ?? 0}</Tag>
+                  </div>
+                </div>
+                {user?.role === 'ADVERTISER' && viewOrder.status === 'PENDING' && (
+                  <Button type="primary" onClick={() => openApplications(viewOrder)}>申请/委派</Button>
+                )}
+                {user?.role !== 'ADVERTISER' && viewOrder.status === 'IN_PROGRESS' && viewOrder.designer?.id === user?.id && (
+                  <Space>
+                    <Upload
+                      multiple
+                      fileList={deliverFiles}
+                      beforeUpload={() => false}
+                      onChange={({ fileList }) => setDeliverFiles(fileList)}
+                    >
+                      <Button>添加交付物</Button>
+                    </Upload>
+                    <Button
+                      type="primary"
+                      loading={submittingDeliver}
+                      disabled={!deliverFiles.length}
+                      onClick={async () => {
+                        if (!viewOrder) return;
+                        setSubmittingDeliver(true);
+                        try {
+                          // 这里演示用：需替换为实际上传接口，当前仅提交本地名称与占位URL
+                          const files = deliverFiles.map((f: any) => ({ url: f.url || f.response?.url || f.name, title: f.name }));
+                          await http.post(`/orders/${viewOrder.id}/deliverables`, { files });
+                          message.success('交付物已提交');
+                          setDeliverFiles([]);
+                        } catch (e: any) {
+                          message.error(e?.response?.data?.message || '提交失败');
+                        } finally {
+                          setSubmittingDeliver(false);
+                        }
+                      }}
+                    >
+                      提交交付物
+                    </Button>
+                  </Space>
+                )}
+              </div>
+            </Card>
+
+            <Card title="参与者">
+              <Space size={24}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Avatar src={viewOrder.customer?.avatar} />
+                  <div>
+                    <div style={{ fontWeight: 600 }}>广告主</div>
+                    <div>{viewOrder.customer?.username || '-'}</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Avatar src={viewOrder.designer?.avatar} />
+                  <div>
+                    <div style={{ fontWeight: 600 }}>设计师</div>
+                    <div>{viewOrder.designer?.username || '-'}</div>
+                  </div>
+                </div>
+              </Space>
+            </Card>
+
+            {(viewOrder.description || viewOrder.contentRequirements) && (
+              <Card title="说明">
+                {viewOrder.description && (
+                  <div style={{ marginBottom: 8 }}>
+                    <Typography.Text type="secondary">描述：</Typography.Text>
+                    <div>{viewOrder.description}</div>
+                  </div>
+                )}
+                {viewOrder.contentRequirements && (
+                  <div>
+                    <Typography.Text type="secondary">内容要求：</Typography.Text>
+                    <div>{viewOrder.contentRequirements}</div>
+                  </div>
+                )}
+              </Card>
+            )}
+
+            {(() => {
+              const tags = Array.isArray(viewOrder.tags)
+                ? viewOrder.tags
+                : (typeof viewOrder.tags === 'string' ? viewOrder.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : []);
+              if (!tags.length) return null;
+              return (
+                <Card title="标签">
+                  <Space wrap>
+                    {tags.map((t: string) => (
+                      <Tag key={t} color="blue">{t}</Tag>
+                    ))}
+                  </Space>
+                </Card>
+              );
+            })()}
+
+            {/* 交付物列表与确认收货 */}
+            <Card title="交付物">
+              <Button
+                size="small"
+                onClick={async () => {
+                  if (!viewOrder) return;
+                  try {
+                    const { data } = await http.get(`/orders/${viewOrder.id}/deliverables`);
+                    Modal.info({
+                      title: '交付物列表',
+                      width: 700,
+                      content: (
+                        <List
+                          dataSource={data || []}
+                          renderItem={(item: any) => (
+                            <List.Item>
+                              <List.Item.Meta
+                                avatar={<Avatar src={item.user?.avatar} />}
+                                title={<a href={item.url} target="_blank" rel="noreferrer">{item.title || item.url}</a>}
+                                description={item.description || item.type}
+                              />
+                              <div>{dayjs(item.createdAt).format('YYYY-MM-DD HH:mm')}</div>
+                            </List.Item>
+                          )}
+                          locale={{ emptyText: '暂无交付物' }}
+                        />
+                      ),
+                    });
+                  } catch (e: any) {
+                    message.error(e?.response?.data?.message || '获取交付物失败');
+                  }
+                }}
+              >
+                查看交付物
+              </Button>
+
+              {user?.role === 'ADVERTISER' && viewOrder.status === 'IN_PROGRESS' && (
+                <Button
+                  type="primary"
+                  style={{ marginLeft: 12 }}
+                  onClick={async () => {
+                    try {
+                      await http.post(`/orders/${viewOrder.id}/confirm-receipt`);
+                      message.success('已确认收货并放款');
+                      setViewVisible(false);
+                      fetchOrders();
+                    } catch (e: any) {
+                      message.error(e?.response?.data?.message || '操作失败');
+                    }
+                  }}
+                >
+                  确认收货并放款
+                </Button>
+              )}
+            </Card>
+          </Space>
+        )}
+      </Drawer>
+
       <Modal
         title={editingOrder ? '编辑订单' : '添加订单'}
         open={isModalVisible}
@@ -410,7 +679,7 @@ const OrderManagement: React.FC = () => {
           <Form.Item
             name="deadline"
             label="截止日期"
-            rules={[{ required: true, message: '请选择截止日期' }]}
+            // rules={[{ required: true, message: '请选择截止日期' }]}
           >
             <DatePicker style={{ width: '100%' }} showTime />
           </Form.Item>
