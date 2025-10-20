@@ -29,9 +29,9 @@ export class ReviewsService {
       throw new BadRequestException('只能对已完成的订单进行评价');
     }
 
-    // 仅允许广告主评价创作者
+    // 仅允许广告商评价创作者
     if (order.customerId !== userId) {
-      throw new ForbiddenException('仅广告主可评价创作者');
+      throw new ForbiddenException('仅广告商可评价创作者');
     }
 
     // 检查是否已经评价过
@@ -83,7 +83,7 @@ export class ReviewsService {
       },
     });
 
-    // 通知被评价者（创作者/广告主）
+    // 通知被评价者（创作者/广告商）
     try {
       this.notifications.notifyUser(review.reviewee.id, 'review.created', {
         id: review.id,
@@ -104,8 +104,8 @@ export class ReviewsService {
     const where: any = {};
 
     // 角色过滤：
-    // - 广告主：仅看我给出的评价
-    // - 创作者/设计师：仅看我收到的且评价者为广告主
+    // - 广告商：仅看我给出的评价
+    // - 创作者/设计师：仅看我收到的且评价者为广告商
     if (role === 'ADVERTISER') {
       where.reviewerId = userId;
     } else if (role === 'CREATOR' || role === 'DESIGNER') {

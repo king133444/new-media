@@ -3,6 +3,9 @@ import { Card, Form, Input, Upload, Button, Space, Tag, Row, Col, Statistic, mes
 import { PlusOutlined, ShoppingCartOutlined, StarOutlined } from '@ant-design/icons';
 import type { UploadProps } from 'antd';
 import http, { resolveFileUrl } from '../store/api/http';
+import { useDispatch } from 'react-redux';
+import { AppDispatch } from '../store';
+import { getUserInfoAsync } from '../store/slices/authSlice';
 
 const { TextArea } = Input;
 
@@ -22,9 +25,11 @@ interface CreatorProfileData {
 
 const CreatorProfile: React.FC = () => {
   const [form] = Form.useForm();
+  const dispatch = useDispatch<AppDispatch>();
   const [profile, setProfile] = useState<CreatorProfileData | null>(null);
   const [skills, setSkills] = useState<string[]>([]);
   const [tags, setTags] = useState<string[]>([]);
+  const [dirty, setDirty] = useState(false);
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -35,6 +40,7 @@ const CreatorProfile: React.FC = () => {
       setSkills(data.skills || []);
       setTags(data.tags || []);
       form.setFieldsValue({ ...data });
+      setDirty(false);
     } catch (e) {
       message.error('获取资料失败');
     }
@@ -57,6 +63,7 @@ const CreatorProfile: React.FC = () => {
         });
         form.setFieldsValue({ avatar: data.url });
         setProfile(prev => (prev ? { ...prev, avatar: data.url } : prev));
+        setDirty(true);
         message.success('头像上传成功');
       } catch (error) {
         message.error('头像上传失败');
@@ -69,7 +76,10 @@ const CreatorProfile: React.FC = () => {
     try {
       await http.patch('/auth/me', values);
       message.success('保存成功');
+      setDirty(false);
       fetchProfile();
+      // 同步刷新 header 头像
+      dispatch(getUserInfoAsync());
     } catch (e) {
       message.error('保存失败');
     }
@@ -79,8 +89,15 @@ const CreatorProfile: React.FC = () => {
     <div>
       <Row gutter={16}>
         <Col span={16}>
-          <Card title="个人资料" extra={<Button type="primary" onClick={() => form.submit()}>保存</Button>}>
-            <Form form={form} layout="vertical" onFinish={handleSave}>
+          <Card title="个人资料" extra={<Space>
+            {dirty && <span style={{ color: '#faad14' }}>有未保存的更改</span>}
+            <Button type="primary" onClick={() => form.submit()} disabled={!dirty}>保存</Button>
+          </Space>}>
+            <Form form={form} layout="vertical" onFinish={handleSave} onValuesChange={() => setDirty(true)}>
+              {/* 确保头像字段参与提交 */}
+              <Form.Item name="avatar" hidden>
+                <Input type="hidden" />
+              </Form.Item>
               <Form.Item name="username" label="用户名" rules={[{ required: true, message: '请输入用户名' }]}>
                 <Input />
               </Form.Item>

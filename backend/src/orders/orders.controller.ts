@@ -26,7 +26,7 @@ export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
   @Post()
-  @ApiOperation({ summary: '创建订单（广告主）' })
+  @ApiOperation({ summary: '创建订单（广告商）' })
   @ApiResponse({ status: 201, description: '订单创建成功' })
   create(@Request() req, @Body() createOrderDto: CreateOrderDto) {
     return this.ordersService.create(req.user.userId, createOrderDto);
@@ -55,7 +55,7 @@ export class OrdersController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: '更新订单（广告主）' })
+  @ApiOperation({ summary: '更新订单（广告商）' })
   @ApiResponse({ status: 200, description: '更新成功' })
   @ApiResponse({ status: 404, description: '订单不存在' })
   update(@Request() req, @Param('id') id: string, @Body() updateOrderDto: UpdateOrderDto) {
@@ -63,7 +63,7 @@ export class OrdersController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: '删除订单（广告主）' })
+  @ApiOperation({ summary: '删除订单（广告商）' })
   @ApiResponse({ status: 200, description: '删除成功' })
   @ApiResponse({ status: 404, description: '订单不存在' })
   remove(@Request() req, @Param('id') id: string) {
@@ -79,7 +79,7 @@ export class OrdersController {
   }
 
   @Post(':id/accept/:applicationId')
-  @ApiOperation({ summary: '接受申请（广告主）' })
+  @ApiOperation({ summary: '接受申请（广告商）' })
   @ApiResponse({ status: 200, description: '接受成功' })
   @ApiResponse({ status: 404, description: '订单或申请不存在' })
   acceptApplication(
@@ -99,7 +99,7 @@ export class OrdersController {
   }
 
   @Post(':id/cancel')
-  @ApiOperation({ summary: '取消订单（广告主）' })
+  @ApiOperation({ summary: '取消订单（广告商）' })
   @ApiResponse({ status: 200, description: '订单已取消' })
   @ApiResponse({ status: 400, description: '操作失败' })
   cancelOrder(@Request() req, @Param('id') id: string) {
@@ -129,7 +129,7 @@ export class OrdersController {
   }
 
   @Post(':id/confirm-receipt')
-  @ApiOperation({ summary: '确认收货并放款（广告主）' })
+  @ApiOperation({ summary: '确认收货并放款（广告商）' })
   @ApiResponse({ status: 200, description: '已确认收货并放款' })
   confirmReceipt(@Request() req, @Param('id') orderId: string) {
     return this.ordersService.confirmReceipt(orderId, req.user.userId);

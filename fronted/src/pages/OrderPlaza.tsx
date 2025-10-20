@@ -29,7 +29,7 @@ import dayjs from 'dayjs';
 import type { ColumnsType } from 'antd/es/table';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
-import http from '../store/api/http';
+import http, { resolveFileUrl } from '../store/api/http';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -212,12 +212,12 @@ console.log('se', selectedOrder);
       ),
     },
     {
-      title: '广告主',
+      title: '广告商',
       key: 'customer',
       width: 150,
       render: (_, record) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Avatar src={record.customer.avatar} icon={<UserOutlined />} size="small" />
+          <Avatar src={resolveFileUrl(record.customer.avatar)} icon={<UserOutlined />} size="small" />
           <div>
             <Text strong>{record.customer.username}</Text>
             {record.customer.company && (
@@ -480,10 +480,12 @@ console.log('se', selectedOrder);
                 </div>
               </Col>
               <Col span={8}>
-                <Text strong>广告主信息：</Text>
+                <Text strong>广告商信息：</Text>
                 <div style={{ marginTop: 8, marginBottom: 16 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Avatar src={selectedOrder.customer.avatar} icon={<UserOutlined />} />
+                    <Avatar src={resolveFileUrl(selectedOrder.customer.avatar)} 
+                    icon={<UserOutlined />} 
+                    />
                     <div>
                       <Text strong>{selectedOrder.customer.username}</Text>
                       {selectedOrder.customer.company && (

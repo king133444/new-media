@@ -24,7 +24,7 @@ import dayjs from "dayjs";
 import { useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { RootState } from "../store";
-import http from "../store/api/http";
+import http, { resolveFileUrl } from "../store/api/http";
 import { wsOn, wsOff, wsEmit } from "../store/websocket";
 
 const { TextArea } = Input;
@@ -146,14 +146,12 @@ const CommunicationCenter: React.FC = () => {
   }, []);
 
   // 获取与特定用户的对话
-  // 支持向上加载更多：传入 before 时间戳增量加载
+  // 支持向上加载更多：传入 before（使用 epoch 毫秒，避免时区解析偏差）
   const fetchMessages = async (contactId: string, before?: string) => {
     setLoading(true);
     try {
       const url = before
-        ? `/communications/conversations/${contactId}?limit=20&before=${encodeURIComponent(
-            before
-          )}`
+        ? `/communications/conversations/${contactId}?limit=20&before=${encodeURIComponent(before)}`
         : `/communications/conversations/${contactId}?limit=20`;
       const { data } = await http.get(url);
       if (before) {
@@ -215,7 +213,7 @@ const CommunicationCenter: React.FC = () => {
   const getRoleText = (role: string) => {
     const roleMap: { [key: string]: string } = {
       ADMIN: "管理员",
-      ADVERTISER: "广告主",
+      ADVERTISER: "广告商",
       CREATOR: "创作者",
       DESIGNER: "设计师",
     };
@@ -428,15 +426,7 @@ const CommunicationCenter: React.FC = () => {
                     avatar={
                       <Badge count={conversation.unreadCount} size="small">
                         <Avatar
-                          src={
-                            conversation.contact.role === "ADMIN"
-                              ? "/images/admin.png"
-                              : conversation.contact.role === "ADVERTISER"
-                              ? "/images/advertiser.png"
-                              : conversation.contact.role === "CREATOR"
-                              ? "/images/creator.png"
-                              : "/images/designer.png"
-                          }
+                          src={resolveFileUrl(conversation.contact.avatar)}
                           icon={<UserOutlined />}
                           size="small"
                         />
@@ -541,21 +531,22 @@ const CommunicationCenter: React.FC = () => {
                   onScroll={handleScroll}
                 >
                   {/* 上拉加载更多 */}
-                  {messages.length >= 20 && (
-                    <div style={{ textAlign: "center", marginBottom: 8 }}>
-                      <Button
-                        size="small"
-                        onClick={() => {
-                          if (!messages.length) return;
-                          const first = messages[0];
-                          fetchMessages(selectedContact.id, first.createdAt);
-                        }}
-                        loading={loading}
-                      >
-                        加载更早消息
-                      </Button>
-                    </div>
-                  )}
+
+                  <div style={{ textAlign: "center", marginBottom: 8 }}>
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        if (!messages.length) return;
+                        const first = messages[0];
+                        const beforeMs = (new Date(first.createdAt).getTime() - 1).toString();
+                        fetchMessages(selectedContact.id, beforeMs);
+                      }}
+                      loading={loading}
+                    >
+                      加载更早消息
+                    </Button>
+                  </div>
+
                   {loading ? (
                     <div style={{ textAlign: "center", padding: "40px 0" }}>
                       <Text type="secondary">加载中...</Text>
@@ -588,8 +579,8 @@ const CommunicationCenter: React.FC = () => {
                           <Avatar
                             src={
                               message.sender.id === user?.id
-                                ? roleToAvatar(user?.role)
-                                : roleToAvatar(selectedContact?.role)
+                                ? resolveFileUrl(user?.avatar as any)
+                                : resolveFileUrl(selectedContact?.avatar)
                             }
                             icon={<UserOutlined />}
                             size="small"
@@ -726,14 +717,9 @@ const CommunicationCenter: React.FC = () => {
                       >
                         <Avatar
                           src={
-                            user.role === "ADMIN"
-                              ? "/images/admin.png"
-                              : user.role === "ADVERTISER"
-                              ? "/images/advertiser.png"
-                              : user.role === "CREATOR"
-                              ? "/images/creator.png"
-                              : "/images/designer.png"
+                            resolveFileUrl(user.avatar)
                           }
+                          icon={<UserOutlined />}
                           size="small"
                         />
                       </Badge>

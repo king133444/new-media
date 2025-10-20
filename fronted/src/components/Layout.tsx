@@ -25,6 +25,7 @@ import { AppDispatch, RootState } from '../store';
 import { markAsRead, markAllAsRead } from '../store/slices/notificationSlice';
 import { wsEmit } from '../store/websocket';
 import { logout } from '../store/slices/authSlice';
+import { resolveFileUrl } from '../store/api/http';
 
 const { Header, Sider, Content } = AntLayout;
 
@@ -202,12 +203,17 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       key: 'profile',
       icon: <UserOutlined />,
       label: '个人资料',
+      onClick: () => {
+        if (user?.role === 'ADVERTISER') navigate('/advertiser/profile');
+        else if (user?.role === 'CREATOR' || user?.role === 'DESIGNER') navigate('/creator/profile');
+        else navigate('/dashboard');
+      },
     },
-    {
-      key: 'settings',
-      icon: <SettingOutlined />,
-      label: '设置',
-    },
+    // {
+    //   key: 'settings',
+    //   icon: <SettingOutlined />,
+    //   label: '设置',
+    // },
     {
       type: 'divider' as const,
     },
@@ -249,8 +255,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               } else if (n.event === 'order.application.created' || n.event === 'order.application.accepted' || n.orderId || n.event === 'order.deliverables.submitted' || n.event === 'order.payout.released' || n.event === 'reviews.cta') {
                 const oid = n.orderId || (n as any).order?.id;
                 // 身份判断：
-                // - 广告主收到“申请”→ 打开申请/委派弹窗
-                // - 提交交付物 → 广告主自动打开订单详情与交付物列表
+                // - 广告商收到“申请”→ 打开申请/委派弹窗
+                // - 提交交付物 → 广告商自动打开订单详情与交付物列表
                 // - 放款通知 → 创作者跳转订单页
                 // - 评价提醒 → 双方跳转评价页
                 if (user?.role === 'ADVERTISER' && n.event === 'order.application.created' && oid) {
@@ -262,10 +268,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 } else if ((user?.role === 'CREATOR' || user?.role === 'DESIGNER') && n.event === 'order.payout.released') {
                   navigate('/creator/transactions');
                 } else if (user?.role === 'ADVERTISER' && n.event === 'order.cancelled.by.designer') {
-                  // 广告主收到创作者取消通知，跳到订单页
+                  // 广告商收到创作者取消通知，跳到订单页
                   navigate('/orders');
                 } else if (n.event === 'reviews.cta') {
-                  // 广告主/创作者都跳到评价列表，由页面逻辑决定弹窗；为避免回弹，参数会在页面处理后清理
+                  // 广告商/创作者都跳到评价列表，由页面逻辑决定弹窗；为避免回弹，参数会在页面处理后清理
                   navigate('/reviews' + (oid ? ('?openReviewForOrder=' + oid) : ''));
                 } else {
                   navigate('/orders');
@@ -346,7 +352,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const getRoleText = (role: string) => {
     const roleMap: { [key: string]: string } = {
       ADMIN: '管理员',
-      ADVERTISER: '广告主',
+      ADVERTISER: '广告商',
       CREATOR: '创作者',
       DESIGNER: '设计师',
     };
@@ -413,6 +419,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             >
               <Avatar 
                 style={{ backgroundColor: '#1890ff', cursor: 'pointer' }}
+                src={resolveFileUrl(user?.avatar)}
                 icon={<UserOutlined />}
               />
             </Dropdown>

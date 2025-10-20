@@ -3,3 +3,4 @@
 /test-orders-complete.sh
 **/node_modules
 **/dist
+**/backend/uploads

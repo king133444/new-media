@@ -49,7 +49,19 @@ export class CommunicationsController {
   @ApiResponse({ status: 200, description: '获取成功' })
   getConversationWithUser(@Request() req, @Param('contactId') contactId: string, @Query('limit') limit?: string, @Query('before') before?: string) {
     const parsedLimit = Math.min(Math.max(parseInt(limit || '20', 10) || 20, 1), 100);
-    const beforeDate = before ? new Date(before) : undefined;
+    let beforeDate: Date | undefined = undefined;
+    if (before) {
+      if (/^\d{10,13}$/.test(before)) {
+        const ms = before.length === 10 ? parseInt(before, 10) * 1000 : parseInt(before, 10);
+        if (!Number.isNaN(ms)) {
+          const d = new Date(ms);
+          if (!Number.isNaN(d.getTime())) beforeDate = d;
+        }
+      } else {
+        const d = new Date(before);
+        if (!Number.isNaN(d.getTime())) beforeDate = d;
+      }
+    }
     return this.communicationsService.getConversationWithUser(req.user.userId, contactId, parsedLimit, beforeDate);
   }
 

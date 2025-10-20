@@ -22,7 +22,7 @@ async function main() {
   });
   console.log('✅ 管理员用户创建成功:', admin.username);
 
-  // 创建广告主用户
+  // 创建广告商用户
   const advertiserPassword = await bcrypt.hash('advertiser123', 10);
   const advertiser = await prisma.user.upsert({
     where: { username: 'advertiser' },
@@ -32,14 +32,14 @@ async function main() {
       email: 'advertiser@example.com',
       password: advertiserPassword,
       role: 'ADVERTISER',
-      bio: '广告主用户',
+      bio: '广告商用户',
       company: '测试广告公司',
       industry: '互联网',
       isVerified: true,
       walletBalance: 10000,
     },
   });
-  console.log('✅ 广告主用户创建成功:', advertiser.username);
+  console.log('✅ 广告商用户创建成功:', advertiser.username);
 
   // 创建创作者用户
   const creatorPassword = await bcrypt.hash('creator123', 10);
@@ -63,7 +63,7 @@ async function main() {
   console.log('\n所有测试用户创建完成！');
   console.log('\n测试账号信息：');
   console.log('管理员: admin / admin123');
-  console.log('广告主: advertiser / advertiser123');
+  console.log('广告商: advertiser / advertiser123');
   console.log('创作者: creator / creator123');
 }
 

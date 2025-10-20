@@ -246,7 +246,7 @@ const ReviewManagement: React.FC = () => {
             <Text strong>{record.reviewer.username}</Text>
             <div>
               <Text type="secondary" style={{ fontSize: 12 }}>
-                {record.reviewer.role === 'ADVERTISER' ? '广告主' : '创作者'}
+                {record.reviewer.role === 'ADVERTISER' ? '广告商' : '创作者'}
               </Text>
             </div>
           </div>
@@ -264,7 +264,7 @@ const ReviewManagement: React.FC = () => {
             <Text strong>{record.reviewee.username}</Text>
             <div>
               <Text type="secondary" style={{ fontSize: 12 }}>
-                {record.reviewee.role === 'ADVERTISER' ? '广告主' : '创作者'}
+                {record.reviewee.role === 'ADVERTISER' ? '广告商' : '创作者'}
               </Text>
             </div>
           </div>
@@ -305,7 +305,7 @@ const ReviewManagement: React.FC = () => {
               }}
             />
           </Tooltip>
-          {(user?.role === 'ADMIN' || record.reviewer.id === user?.id) && (
+          {/* {(user?.role === 'ADMIN' || record.reviewer.id === user?.id) && (
             <Tooltip title="编辑">
               <Button
                 type="text"
@@ -322,7 +322,7 @@ const ReviewManagement: React.FC = () => {
                 }}
               />
             </Tooltip>
-          )}
+          )} */}
           {user?.role === 'ADMIN' && (
             <Tooltip title="删除">
               <Button
@@ -484,7 +484,7 @@ const ReviewManagement: React.FC = () => {
                       <Text strong>{selectedReview.reviewer.username}</Text>
                       <div>
                         <Text type="secondary" style={{ fontSize: 12 }}>
-                          {selectedReview.reviewer.role === 'ADVERTISER' ? '广告主' : '创作者'}
+                          {selectedReview.reviewer.role === 'ADVERTISER' ? '广告商' : '创作者'}
                         </Text>
                       </div>
                     </div>
@@ -500,7 +500,7 @@ const ReviewManagement: React.FC = () => {
                       <Text strong>{selectedReview.reviewee.username}</Text>
                       <div>
                         <Text type="secondary" style={{ fontSize: 12 }}>
-                          {selectedReview.reviewee.role === 'ADVERTISER' ? '广告主' : '创作者'}
+                          {selectedReview.reviewee.role === 'ADVERTISER' ? '广告商' : '创作者'}
                         </Text>
                       </div>
                     </div>

@@ -101,9 +101,9 @@ model OrderApplication {
   userId      String
   user        User              @relation(fields: [userId], references: [id])
 
-  // 离线提醒（广告主离线时的补推依据）
-  publisherId String            // 订单发布者（广告主）ID = order.customerId
-  isRead      Boolean           @default(false) // 广告主是否已读此申请
+  // 离线提醒（广告商离线时的补推依据）
+  publisherId String            // 订单发布者（广告商）ID = order.customerId
+  isRead      Boolean           @default(false) // 广告商是否已读此申请
   deliveredAt DateTime?         // （可选）何时已推送到在线端
 
   @@unique([orderId, userId])

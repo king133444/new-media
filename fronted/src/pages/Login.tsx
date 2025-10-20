@@ -60,7 +60,7 @@ const Login: React.FC = () => {
       <Card className="login-form">
         <div className="login-title">
           <h1>新媒体工作室管理系统</h1>
-          <p style={{ color: '#666', marginTop: '8px' }}>连接广告主与创作者的桥梁</p>
+          <p style={{ color: '#666', marginTop: '8px' }}>连接广告商与创作者的桥梁</p>
         </div>
 
         <Tabs activeKey={activeTab} onChange={setActiveTab} centered>
@@ -143,7 +143,7 @@ const Login: React.FC = () => {
                 initialValue="advertiser"
               >
                 <select style={{ width: '100%', height: '40px', border: '1px solid #d9d9d9', borderRadius: '6px', padding: '0 11px' }}>
-                  <option value="advertiser">广告主</option>
+                  <option value="advertiser">广告商</option>
                   <option value="designer">设计师</option>
                 </select>
               </Form.Item>

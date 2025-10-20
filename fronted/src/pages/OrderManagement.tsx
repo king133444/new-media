@@ -68,7 +68,7 @@ const OrderManagement: React.FC = () => {
           status: filters.status,
           type: filters.type,
           keyword: filters.keyword,
-          // 广告主查看全部
+          // 广告商查看全部
           mine: user?.role === "ADVERTISER" ? false : undefined,
         },
       });
@@ -151,9 +151,36 @@ const OrderManagement: React.FC = () => {
                 renderItem={(item: any) => (
                   <List.Item>
                     <List.Item.Meta
-                      avatar={<Avatar src={item.user?.avatar} />}
+                      avatar={<Avatar src={resolveFileUrl(item.user?.avatar)} />}
                       title={
-                        <a href={item.url} target="_blank" rel="noreferrer">
+                        <a
+                          role="button"
+                          onClick={async (e) => {
+                            e.preventDefault();
+                            try {
+                              const resp = await http.get(`/materials/${item.id}/preview`, { responseType: 'blob' });
+                              const blob = new Blob([resp.data]);
+                              const filename = item.title || `material-${item.id}`;
+                              // IE/Edge Legacy 兼容：使用 msSaveOrOpenBlob
+                              const nav: any = window.navigator;
+                              if (nav && typeof nav.msSaveOrOpenBlob === 'function') {
+                                nav.msSaveOrOpenBlob(blob, filename);
+                                return;
+                              }
+                              const url = window.URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = filename;
+                              document.body.appendChild(a);
+                              a.click();
+                              a.remove();
+                              window.URL.revokeObjectURL(url);
+                            } catch (err) {
+                              message.error('下载失败');
+                            }
+                          }}
+                          href="#!"
+                        >
                           {item.title || item.url}
                         </a>
                       }
@@ -221,7 +248,7 @@ const OrderManagement: React.FC = () => {
       dataIndex: "id",
       key: "id",
     },
-    // 广告主查看申请数
+    // 广告商查看申请数
     {
       title: "申请数",
       key: "applications",
@@ -327,13 +354,13 @@ const OrderManagement: React.FC = () => {
             编辑
           </Button>
           )}
-          {/* 广告主：查看申请并委派 */}
+          {/* 广告商：查看申请并委派 */}
           {user?.role === "ADVERTISER" && record.status === "PENDING" && (
             <Button type="link" onClick={() => openApplications(record)}>
               申请/委派
             </Button>
           )}
-          {/* 取消：创作者/广告主在非已完成和非已取消时可取消；管理员不显示取消 */}
+          {/* 取消：创作者/广告商在非已完成和非已取消时可取消；管理员不显示取消 */}
           {user?.role !== "ADMIN" &&
             record.status !== "CANCELLED" &&
             record.status !== "COMPLETED" && (
@@ -343,10 +370,10 @@ const OrderManagement: React.FC = () => {
                 icon={<CloseOutlined />}
                 onClick={() => handleCancelOrder(record.id)}
               >
-              取消
-            </Button>
+            取消
+          </Button>
           )}
-          {/* 删除：仅已取消可删除（管理员/广告主） */}
+          {/* 删除：仅已取消可删除（管理员/广告商） */}
           {record.status === "CANCELLED" &&
             (user?.role === "ADMIN" || user?.role === "ADVERTISER") && (
               <Button
@@ -483,7 +510,7 @@ const OrderManagement: React.FC = () => {
       title: "确认委派给该创作者？",
       icon: <ExclamationCircleOutlined style={{ color: "#faad14" }} />,
       content:
-        "委派后订单将进入进行中，广告主将不可再编辑此订单（涉及资金调整请走退款/补差流程）。",
+        "委派后订单将进入进行中，广告商将不可再编辑此订单（涉及资金调整请走退款/补差流程）。",
       okText: "确认委派",
       cancelText: "取消",
       onOk: async () => {
@@ -782,14 +809,14 @@ const OrderManagement: React.FC = () => {
             <Card title="参与者">
               <Space size={24}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <Avatar src={viewOrder.customer?.avatar} />
+                  <Avatar src={resolveFileUrl(viewOrder.customer?.avatar)} />
                   <div>
-                    <div style={{ fontWeight: 600 }}>广告主</div>
+                    <div style={{ fontWeight: 600 }}>广告商</div>
                     <div>{viewOrder.customer?.username || "-"}</div>
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <Avatar src={viewOrder.designer?.avatar} />
+                  <Avatar src={resolveFileUrl(viewOrder.designer?.avatar)} />
                   <div>
                     <div style={{ fontWeight: 600 }}>设计师</div>
                     <div>{viewOrder.designer?.username || "-"}</div>
@@ -851,31 +878,31 @@ const OrderManagement: React.FC = () => {
                           renderItem={(item: any) => (
                             <List.Item>
                               <List.Item.Meta
-                                avatar={<Avatar src={item.user?.avatar} />}
+                                avatar={<Avatar src={resolveFileUrl(item.user?.avatar)} />}
                                 title={
                                   <a
                                     role="button"
                                     onClick={async (e) => {
                                       e.preventDefault();
                                       try {
-                                        
-                                        const resp = await http.get(
-                                          `/materials/${item.id}/preview`,
-                                          { responseType: "blob" }
-                                        );
+                                        const resp = await http.get(`/materials/${item.id}/preview`, { responseType: 'blob' });
                                         const blob = new Blob([resp.data]);
-                                        const url =
-                                          window.URL.createObjectURL(blob);
-                                        const a = document.createElement("a");
+                                        const filename = item.title || `material-${item.id}`;
+                                        const nav: any = window.navigator;
+                                        if (nav && typeof nav.msSaveOrOpenBlob === 'function') {
+                                          nav.msSaveOrOpenBlob(blob, filename);
+                                          return;
+                                        }
+                                        const url = window.URL.createObjectURL(blob);
+                                        const a = document.createElement('a');
                                         a.href = url;
-                                        a.download =
-                                          item.title || `material-${item.id}`;
+                                        a.download = filename;
                                         document.body.appendChild(a);
                                         a.click();
                                         a.remove();
                                         window.URL.revokeObjectURL(url);
                                       } catch (err) {
-                                        message.error("下载失败");
+                                        message.error('下载失败');
                                       }
                                     }}
                                     href="#!"

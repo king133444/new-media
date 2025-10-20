@@ -22,7 +22,7 @@ export class MaterialsService {
         this.prisma.material.create({
           data: {
             url: `/uploads/materials/${file.filename}`,
-            title: file.originalname,
+            title: toUtf8FileName(file.originalname),
             description: file.mimetype,
             type: 'OTHER' as any,
             status: 'ACTIVE' as any,
@@ -32,7 +32,7 @@ export class MaterialsService {
         })
       )
     );
-    // 提交交付物后通知广告主（订单发布者）
+    // 提交交付物后通知广告商（订单发布者）
     try {
       const order = await this.prisma.order.findUnique({ where: { id: orderId } });
       if (order?.customerId) {
@@ -55,6 +55,16 @@ export class MaterialsService {
     const localPath = path.join(root, material.url.replace(/^\//, ''));
     if (!fs.existsSync(localPath)) throw new NotFoundException('文件不存在');
     return { localPath, material };
+  }
+}
+
+function toUtf8FileName(name: string): string {
+  try {
+    // 处理部分客户端以 latin1 方式传入导致的中文乱码
+    const converted = Buffer.from(name, 'latin1').toString('utf8');
+    return converted;
+  } catch {
+    return name;
   }
 }
 

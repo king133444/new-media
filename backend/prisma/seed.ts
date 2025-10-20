@@ -53,7 +53,7 @@ async function main() {
     email: 'advertiser@example.com',
     password: 'advertiser123',
     role: 'ADVERTISER',
-    bio: '广告主用户',
+    bio: '广告商用户',
     company: '测试广告公司',
     industry: '互联网',
     walletBalance: 10000,

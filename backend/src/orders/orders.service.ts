@@ -19,9 +19,9 @@ export class OrdersService {
     private notifications: NotificationsGateway
   ) {}
 
-  // 创建订单（广告主）
+  // 创建订单（广告商）
   async create(userId: string, createOrderDto: CreateOrderDto) {
-    // 托管：下单时从广告主余额中扣款并记录支付到平台（寄存）
+    // 托管：下单时从广告商余额中扣款并记录支付到平台（寄存）
     return this.prisma.$transaction(async (tx) => {
       const user = await tx.user.findUnique({
         where: { id: userId },
@@ -89,7 +89,7 @@ export class OrdersService {
 
     // 根据角色过滤订单
     if (role === "ADVERTISER") {
-      // 广告主：如果 mine !== false（默认 true），仅查看自己的；若 mine === false，则查看全部
+      // 广告商：如果 mine !== false（默认 true），仅查看自己的；若 mine === false，则查看全部
       if (mine === false) {
         // 不限定 customerId
       } else {
@@ -274,7 +274,7 @@ export class OrdersService {
     return { ...order, tags, applications: enhancedApps } as any;
   }
 
-  // 更新订单（广告主）
+  // 更新订单（广告商）
   async update(id: string, userId: string, updateOrderDto: UpdateOrderDto) {
     const order = await this.prisma.order.findUnique({
       where: { id },
@@ -313,7 +313,7 @@ export class OrdersService {
     });
   }
 
-  // 删除订单（广告主/创作者）
+  // 删除订单（广告商/创作者）
   async remove(id: string, userId: string) {
     const order = await this.prisma.order.findUnique({
       where: { id },
@@ -380,7 +380,7 @@ export class OrdersService {
         orderId,
         userId,
         message: applyOrderDto.message,
-        // 离线提醒字段：广告主为发布者
+        // 离线提醒字段：广告商为发布者
         publisherId: order.customerId,
         isRead: false,
       },
@@ -395,7 +395,7 @@ export class OrdersService {
       },
     });
 
-    // 通知订单发布者（广告主）：统一负载结构并携带必要信息，便于前端格式化
+    // 通知订单发布者（广告商）：统一负载结构并携带必要信息，便于前端格式化
     this.notifications.notifyUser(
       order.customerId,
       "order.application.created",
@@ -451,7 +451,7 @@ export class OrdersService {
       )
     );
 
-    // 通知广告主有交付物提交
+    // 通知广告商有交付物提交
     const ts = new Date().toISOString();
     this.notifications.notifyUser(
       order.customerId,
@@ -495,7 +495,7 @@ export class OrdersService {
     });
   }
 
-  // 广告主确认收货并放款
+  // 广告商确认收货并放款
   async confirmReceipt(orderId: string, advertiserId: string) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
@@ -566,7 +566,7 @@ export class OrdersService {
         amount: order.amount,
         createdAt: ts,
       });
-      // 仅提醒广告主去评价
+      // 仅提醒广告商去评价
       this.notifications.notifyUser(order.customerId, "reviews.cta", {
         id: `reviews-cta-${orderId}`,
         orderId,
@@ -577,7 +577,7 @@ export class OrdersService {
     });
   }
 
-  // 接受申请（广告主）
+  // 接受申请（广告商）
   async acceptApplication(
     orderId: string,
     applicationId: string,
@@ -752,7 +752,7 @@ export class OrdersService {
     throw new BadRequestException("订单状态不允许此操作");
   }
 
-  // 创作者/设计师取消订单：仅未完成、且自己为 designerId；需退款给广告主
+  // 创作者/设计师取消订单：仅未完成、且自己为 designerId；需退款给广告商
   async cancelOrderByDesigner(id: string, designerId: string) {
     const order = await this.prisma.order.findUnique({ where: { id } });
     if (!order) throw new NotFoundException("订单不存在");
@@ -762,7 +762,7 @@ export class OrdersService {
       throw new BadRequestException("订单已完成，无法取消");
     if (order.status === "CANCELLED") return { success: true };
 
-    // 退款：将金额退回广告主钱包，并记录 REFUND 交易
+    // 退款：将金额退回广告商钱包，并记录 REFUND 交易
     return this.prisma.$transaction(async (tx) => {
       await tx.order.update({
         where: { id },
@@ -782,7 +782,7 @@ export class OrdersService {
         data: { walletBalance: { increment: order.amount } },
       });
 
-      // 通知广告主
+      // 通知广告商
       this.notifications.notifyUser(
         order.customerId,
         "order.cancelled.by.designer",

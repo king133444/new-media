@@ -23,5 +23,10 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
 
   @IsOptional()
   tags?: any;
+
+  // 允许前端通过 /auth/me 更新头像路径（由 /materials/upload-avatar 返回）
+  @IsOptional()
+  @IsString()
+  avatar?: string;
 }
 

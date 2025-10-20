@@ -23,9 +23,13 @@ export class MaterialsController {
         },
         filename: (req, file, cb) => {
           const ext = path.extname(file.originalname);
-          const name = path.basename(file.originalname, ext);
+          const raw = path.basename(file.originalname, ext);
+          // 将物理文件名限定为 ASCII，避免中文在部分文件系统/工具中出现乱码
+          const safeBase = raw
+            .normalize('NFKD')
+            .replace(/[^a-zA-Z0-9-_\.]+/g, '_');
           const stamp = Date.now();
-          cb(null, `${name}-${stamp}${ext}`);
+          cb(null, `${safeBase || 'file'}-${stamp}${ext}`);
         },
       }),
       limits: { fileSize: 20 * 1024 * 1024 },
@@ -75,9 +79,13 @@ export class MaterialsController {
   @UseGuards(JwtAuthGuard)
   async preview(@Param('id') id: string, @Res() res: Response) {
     const { localPath, material } = await this.materialsService.resolveFilePathByMaterialId(id);
-    const filename = path.basename(localPath);
+    const fallbackName = material.title || path.basename(localPath);
+    const encodedName = encodeURIComponent(fallbackName);
+    const stat = fs.statSync(localPath);
     res.setHeader('Content-Type', 'application/octet-stream');
-    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(material.title || filename)}`);
+    // 同时设置 filename 与 filename*，提升各浏览器（含 IE/Edge Legacy）兼容性
+    res.setHeader('Content-Disposition', `attachment; filename="${encodedName}"; filename*=UTF-8''${encodedName}`);
+    res.setHeader('Content-Length', stat.size.toString());
     const stream = fs.createReadStream(localPath);
     stream.pipe(res);
   }

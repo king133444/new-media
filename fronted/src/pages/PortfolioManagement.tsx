@@ -506,7 +506,7 @@ const PortfolioManagement: React.FC = () => {
                       <Text strong>{selectedPortfolio.user.username}</Text>
                       <div>
                         <Text type="secondary" style={{ fontSize: 12 }}>
-                          {selectedPortfolio.user.role === 'ADVERTISER' ? '广告主' : '创作者'}
+                          {selectedPortfolio.user.role === 'ADVERTISER' ? '广告商' : '创作者'}
                         </Text>
                       </div>
                     </div>

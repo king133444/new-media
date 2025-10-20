@@ -25,8 +25,9 @@ import {
   TrophyOutlined,
 } from '@ant-design/icons';
 import type { UploadProps } from 'antd';
-import { useSelector } from 'react-redux';
-import { RootState } from '../store';
+import { useDispatch, useSelector } from 'react-redux';
+import { AppDispatch, RootState } from '../store';
+import { getUserInfoAsync } from '../store/slices/authSlice';
 import http, { resolveFileUrl } from '../store/api/http';
 
 const { TextArea } = Input;
@@ -70,6 +71,8 @@ interface Stats {
 const AdvertiserProfile: React.FC = () => {
   const [form] = Form.useForm();
   const [, setLoading] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const dispatch = useDispatch<AppDispatch>();
   const [profile, setProfile] = useState<AdvertiserProfileData | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [tags, setTags] = useState<string[]>([]);
@@ -90,6 +93,7 @@ const AdvertiserProfile: React.FC = () => {
           ...data,
           tags: data.tags || [],
         });
+        setDirty(false);
       }
     } catch (error: any) {
       console.log(error);
@@ -129,10 +133,12 @@ const AdvertiserProfile: React.FC = () => {
   const handleUpdateProfile = async (values: any) => {
     setLoading(true);
     try {
-      await http.put('/advertisers/profile', values);
+      await http.patch('/advertisers/profile', values);
       message.success('个人资料更新成功');
       fetchProfile();
       fetchStats();
+      setDirty(false);
+      dispatch(getUserInfoAsync());
     } catch (error: any) {
       message.error(error?.response?.data?.message || '更新失败');
     } finally {
@@ -167,6 +173,8 @@ const AdvertiserProfile: React.FC = () => {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       form.setFieldsValue({ avatar: data.url });
+      setProfile(prev => (prev ? { ...prev, avatar: data.url } : prev));
+      setDirty(true);
       message.success('头像上传成功');
     } catch (error) {
       message.error('头像上传失败');
@@ -298,17 +306,25 @@ const AdvertiserProfile: React.FC = () => {
 
         {/* 个人资料编辑 */}
         <Col span={16}>
-          <Card title="个人资料管理" extra={
-            <Button type="primary" onClick={() => form.submit()}>
-              保存修改
-            </Button>
+      <Card title="个人资料管理" extra={
+            <Space>
+              {dirty && <span style={{ color: '#faad14' }}>有未保存的更改</span>}
+              <Button type="primary" onClick={() => form.submit()} disabled={!dirty}>
+                保存修改
+              </Button>
+            </Space>
           }>
             <Form
               form={form}
               layout="vertical"
               onFinish={handleUpdateProfile}
+              onValuesChange={() => setDirty(true)}
               initialValues={profile ?? undefined}
             >
+              {/* 确保头像字段参与提交 */}
+              <Form.Item name="avatar" hidden>
+                <Input type="hidden" />
+              </Form.Item>
               <Row gutter={16}>
                 <Col span={12}>
                   <Form.Item

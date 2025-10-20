@@ -53,7 +53,7 @@ const UserManagement: React.FC = () => {
       render: (role: string) => {
         const roleMap: { [key: string]: { text: string; color: string } } = {
           admin: { text: '管理员', color: 'red' },
-          advertiser: { text: '广告主', color: 'blue' },
+          advertiser: { text: '广告商', color: 'blue' },
           creator: { text: '创作者', color: 'green' },
           designer: { text: '设计师', color: 'orange' },
         };
@@ -165,7 +165,7 @@ const UserManagement: React.FC = () => {
           />
           <Select placeholder="按角色筛选" style={{ width: 120 }} allowClear>
             <Select.Option value="admin">管理员</Select.Option>
-            <Select.Option value="advertiser">广告主</Select.Option>
+            <Select.Option value="advertiser">广告商</Select.Option>
             <Select.Option value="creator">创作者</Select.Option>
             <Select.Option value="designer">设计师</Select.Option>
           </Select>
@@ -226,7 +226,7 @@ const UserManagement: React.FC = () => {
           >
             <Select placeholder="请选择角色">
               <Select.Option value="admin">管理员</Select.Option>
-              <Select.Option value="advertiser">广告主</Select.Option>
+              <Select.Option value="advertiser">广告商</Select.Option>
               <Select.Option value="creator">创作者</Select.Option>
               <Select.Option value="designer">设计师</Select.Option>
             </Select>

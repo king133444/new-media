@@ -155,7 +155,7 @@ const Dashboard: React.FC = () => {
   const getRoleTag = (role: string) => {
     const roleMap: { [key: string]: { color: string; text: string } } = {
       ADMIN: { color: 'red', text: '管理员' },
-      ADVERTISER: { color: 'blue', text: '广告主' },
+      ADVERTISER: { color: 'blue', text: '广告商' },
       CREATOR: { color: 'green', text: '创作者' },
       DESIGNER: { color: 'purple', text: '设计师' },
     };
@@ -457,7 +457,7 @@ const Dashboard: React.FC = () => {
                         <span>{getStatusTag(item.status)}</span>
                         <span>{item.count} ({percentage.toFixed(1)}%)</span>
                       </div>
-                      <Progress percent={percentage} size="small" />
+                      <Progress percent={Number(percentage.toFixed(1))} size="small" />
                     </div>
                   );
                 })}
@@ -484,7 +484,7 @@ const Dashboard: React.FC = () => {
                         </span>
                         <span>{item.count}</span>
                       </div>
-                      <Progress percent={percentage} size="small" />
+                      <Progress percent={Number(percentage.toFixed(1))} size="small" />
                     </div>
                   );
                 })}

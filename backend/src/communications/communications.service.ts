@@ -192,7 +192,8 @@ export class CommunicationsService {
       ],
     };
     if (before) {
-      whereBase.createdAt = { lt: before };
+      const safeBefore = new Date(before.getTime() - 1); // 避免等于边界被排除
+      whereBase.createdAt = { lt: safeBefore };
     }
     const latest = await this.prisma.communication.findMany({
       where: whereBase,
@@ -204,7 +205,10 @@ export class CommunicationsService {
           select: { id: true, username: true, avatar: true, role: true },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [
+        { createdAt: 'desc' },
+        { id: 'desc' },
+      ],
       take: limit,
     });
     const messages = latest.reverse();
@@ -316,7 +320,7 @@ export class CommunicationsService {
   }
 
   // ====== 离线通知/未读补推相关 ======
-  // 未读订单申请（广告主作为 publisherId）
+  // 未读订单申请（广告商作为 publisherId）
   async getUnreadOrderApplications(userId: string) {
     return this.prisma.orderApplication.findMany({
       where: { publisherId: userId, isRead: false },
@@ -356,7 +360,7 @@ export class CommunicationsService {
     return { applicationId };
   }
 
-  // 将我的所有订单申请标记为已读（广告主批量）
+  // 将我的所有订单申请标记为已读（广告商批量）
   async markOrderApplicationReadAll(userId: string) {
     const res = await this.prisma.orderApplication.updateMany({
       where: { publisherId: userId, isRead: false },

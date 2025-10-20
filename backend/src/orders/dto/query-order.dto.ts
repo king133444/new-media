@@ -50,7 +50,7 @@ export class QueryOrderDto {
   @IsOptional()
   maxAmount?: number;
 
-  @ApiProperty({ description: '是否仅查看自己的订单（广告主专用）', required: false, example: true })
+  @ApiProperty({ description: '是否仅查看自己的订单（广告商专用）', required: false, example: true })
   @IsBoolean()
   @IsOptional()
   @Transform(({ value }) => {

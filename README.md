@@ -6,7 +6,7 @@
 
 - 订单管理
   - 发布/编辑/删除/取消/完成
-  - 创作者/设计师申请接单，广告主挑选并委派
+  - 创作者/设计师申请接单，广告商挑选并委派
   - 委派后自动通知被选中的创作者
   - 订单广场（创作者端）：支持“已申请”标记、取消按钮隐藏等友好状态展示
   - 统计与筛选：按状态、金额、关键词等筛选
@@ -24,7 +24,7 @@
   - 体验优化：增量追加消息、保持滚动在底部、避免重复/抖动、无刷新实时更新
 
 - 用户与权限
-  - 角色：管理员/广告主/创作者/设计师
+  - 角色：管理员/广告商/创作者/设计师
   - JWT 登录鉴权（HTTP 与 WebSocket 统一鉴权）
   - 个人资料（含创作者资料页）
 
@@ -43,6 +43,27 @@
 
 ## 最近更新（重要）
 
+- 本次更新（订单/头像/下载与聊天边界修复）
+  - 订单管理/发布
+    - 管理页移除“添加订单”，取消后的“再次发布”改为跳转“广告投放”页并携带预填数据。
+    - 广告投放页调整：移除“预算上限/项目需求”，将“截止时间”设为必填，标签改为空格分割；支持从“再次发布”跳转的预填；创建成功后跳回订单管理。
+  - 头像上传与资料联动
+    - 新增 `POST /api/materials/upload-avatar`：保存至 `/uploads/avatars` 并返回相对路径；后端开放 `UpdateUserDto.avatar` 以 `PATCH /auth/me` 入库。
+    - 创作者/广告商资料页：
+      - 表单增加隐藏 `avatar` 字段，上传成功后写入表单；引入“未保存变更”提示，保存按钮仅在有改动时可点。
+      - 保存成功后触发全局 `getUserInfoAsync`，刷新右上角头像。
+    - Layout：右上角头像改为 `resolveFileUrl(user.avatar)`；“个人资料”菜单按角色跳转至相应资料页。
+    - 全站头像统一：交流中心、订单详情参与者、订单广场等全部使用 `resolveFileUrl(...)`，浏览器自动缓存，避免重复请求。
+  - 交付物下载（中文文件名与 IE 兼容）
+    - 后端下载响应：`Content-Disposition` 同时设置 `filename` 与 `filename*`（UTF-8），并返回 `Content-Length`，提升各浏览器（含 IE/旧 Edge）兼容性。
+    - 前端点击下载：以 Blob 方式下载；现代浏览器使用 `a.download`，IE/旧 Edge 使用 `navigator.msSaveOrOpenBlob`，不再新开标签页。
+    - 中文文件名乱码修复：
+      - 入库标题 `title` 在服务端由 latin1 → utf8 转换，确保下载显示中文正常。
+      - 磁盘物理文件名做 ASCII 安全化（保留原始标题用于展示与下载名）。
+  - 聊天“加载更早消息”边界问题
+    - 后端控制器支持 `before` 传 epoch 毫秒或 ISO 字符串；服务层以 `createdAt < (before - 1ms)` 查询，并增加二级排序 `createdAt desc, id desc`，消除边界等值/同毫秒多条导致的空页。
+    - 前端在“加载更早”时传递 `first.createdAtMs - 1`，避免等于边界。
+
 - 评价管理
   - 仅展示“与我有关”的评价（我给出的/我收到的）；管理员可查看全部。
   - 订单确认收货后，系统为双方各生成一条“待评价”记录（PENDING），铃铛“去评价”直达 `/reviews?openReviewForOrder=<orderId>` 并只弹一次编辑弹窗。
@@ -57,8 +78,8 @@
   - 前端顶部“加载更早消息”向上插入，保持滚动体验；仅在用户位于底部/刚选联系人/刚发送时自动滚底，避免阅读历史时被打断。
 
 - 铃铛通知跳转
-  - 申请 → 广告主直达 `/orders?openApplicationsFor=<orderId>`；订单页处理后清理参数，避免重复弹出。
-  - 交付物提交 → 广告主直达 `/orders?openOrder=<orderId>&showDeliverables=1`（自动打开详情与交付物列表），参数用后即清。
+  - 申请 → 广告商直达 `/orders?openApplicationsFor=<orderId>`；订单页处理后清理参数，避免重复弹出。
+  - 交付物提交 → 广告商直达 `/orders?openOrder=<orderId>&showDeliverables=1`（自动打开详情与交付物列表），参数用后即清。
   - 放款 → 创作者直达 `/creator/transactions`。
   - 去评价 → 双方直达 `/reviews?openReviewForOrder=<orderId>`，页面定位待评价并只弹一次。
 
@@ -138,7 +159,7 @@ npx prisma validate
   - 前端在建立 Socket.IO 连接时，通过 `auth.token` 携带 JWT；网关使用同一 `JWT_SECRET` 验证并将连接加入 `user:{userId}` 房间。
 
 - 事件设计（部分）
-  - 订单申请创建：`order.application.created` → 仅推送给广告主
+  - 订单申请创建：`order.application.created` → 仅推送给广告商
   - 订单申请被接受：`order.application.accepted` → 推送给被委派的创作者
   - 聊天消息发送：客户端发 `communication.send` → 网关入库后：
     - 给接收者推送 `communication.message`
