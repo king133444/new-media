@@ -179,15 +179,15 @@ const ReviewManagement: React.FC = () => {
   };
 
   // 获取状态标签
-  const getStatusTag = (status: string) => {
-    const statusMap: { [key: string]: { color: string; text: string } } = {
-      PENDING: { color: 'orange', text: '待审核' },
-      APPROVED: { color: 'green', text: '已通过' },
-      REJECTED: { color: 'red', text: '已拒绝' },
-    };
-    const config = statusMap[status] || { color: 'default', text: status };
-    return <Tag color={config.color}>{config.text}</Tag>;
-  };
+  // const getStatusTag = (status: string) => {
+  //   const statusMap: { [key: string]: { color: string; text: string } } = {
+  //     PENDING: { color: 'orange', text: '待审核' },
+  //     APPROVED: { color: 'green', text: '已通过' },
+  //     REJECTED: { color: 'red', text: '已拒绝' },
+  //   };
+  //   const config = statusMap[status] || { color: 'default', text: status };
+  //   return <Tag color={config.color}>{config.text}</Tag>;
+  // };
 
   // 获取类型标签
   const getTypeTag = (type: string) => {
@@ -271,13 +271,13 @@ const ReviewManagement: React.FC = () => {
         </div>
       ),
     },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
-      width: 100,
-      render: (status) => getStatusTag(status),
-    },
+    // {
+    //   title: '状态',
+    //   dataIndex: 'status',
+    //   key: 'status',
+    //   width: 100,
+    //   render: (status) => getStatusTag(status),
+    // },
     {
       title: '评价时间',
       dataIndex: 'createdAt',
@@ -345,26 +345,26 @@ const ReviewManagement: React.FC = () => {
       {/* 统计信息 */}
       {stats && (
         <Row gutter={16} style={{ marginBottom: 16 }}>
-          <Col span={6}>
+          <Col span={12}>
             <Card>
               <Statistic
                 title="总评价数"
-                value={stats.totalReviews}
+                value={ stats?.asReviewee?.total}
                 prefix={<StarOutlined />}
               />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col span={12}>
             <Card>
               <Statistic
                 title="平均评分"
-                value={stats.averageRating}
+                value={stats?.asReviewee?.averageRating}
                 precision={1}
                 prefix={<StarOutlined />}
               />
             </Card>
           </Col>
-          <Col span={6}>
+          {/* <Col span={6}>
             <Card>
               <Statistic
                 title="待审核"
@@ -381,12 +381,12 @@ const ReviewManagement: React.FC = () => {
                 prefix={<UserOutlined />}
               />
             </Card>
-          </Col>
+          </Col> */}
         </Row>
       )}
 
       {/* 筛选器 */}
-      <Card style={{ marginBottom: 16 }}>
+      {/* <Card style={{ marginBottom: 16 }}>
         <Row gutter={16}>
           <Col xs={24} sm={8} md={6}>
             <Select
@@ -414,7 +414,7 @@ const ReviewManagement: React.FC = () => {
             </Select>
           </Col>
         </Row>
-      </Card>
+      </Card> */}
 
       {/* 评价列表 */}
       <Card>
@@ -452,12 +452,12 @@ const ReviewManagement: React.FC = () => {
                   <Text style={{ marginLeft: 8, fontSize: 16 }}>{selectedReview.rating} 分</Text>
                 </div>
               </Col>
-              <Col span={12}>
+              {/* <Col span={12}>
                 <Text strong>状态：</Text>
                 <div style={{ marginTop: 8, marginBottom: 16 }}>
                   {getStatusTag(selectedReview.status)}
                 </div>
-              </Col>
+              </Col> */}
             </Row>
 
             <Text strong>评价内容：</Text>
@@ -571,7 +571,7 @@ const ReviewManagement: React.FC = () => {
             <TextArea rows={3} placeholder="请输入回复内容（可选）" />
           </Form.Item> */}
 
-          {user?.role === 'ADMIN' && (
+          {/* {user?.role === 'ADMIN' && (
             <Form.Item
               name="status"
               label="状态"
@@ -582,7 +582,7 @@ const ReviewManagement: React.FC = () => {
                 <Option value="REJECTED">已拒绝</Option>
               </Select>
             </Form.Item>
-          )}
+          )} */}
 
           <Form.Item>
             <Space>

@@ -155,6 +155,7 @@ const OrderPlaza: React.FC = () => {
     const config = priorityMap[priority] || { color: 'default', text: priority };
     return <Tag color={config.color}>{config.text}</Tag>;
   };
+console.log('se', selectedOrder);
 
   // 获取类型标签
   const getTypeTag = (type: string) => {
@@ -518,7 +519,7 @@ const OrderPlaza: React.FC = () => {
                 <Text strong>标签：</Text>
                 <div style={{ marginTop: 8, marginBottom: 16 }}>
                   <Space wrap>
-                    {selectedOrder.tags.map(tag => (
+                    {selectedOrder.tags?.map(tag => (
                       <Tag key={tag} color="blue">{tag}</Tag>
                     ))}
                   </Space>

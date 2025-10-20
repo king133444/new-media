@@ -173,7 +173,7 @@ const AdvertiserTransactionManagement: React.FC = () => {
   // 获取状态标签
   const getStatusTag = (status: string) => {
     const statusMap: { [key: string]: { color: string; text: string } } = {
-      PENDING: { color: 'orange', text: '待处理' },
+      PENDING: { color: 'orange', text: '已发布' },
       COMPLETED: { color: 'green', text: '已完成' },
       FAILED: { color: 'red', text: '失败' },
       CANCELLED: { color: 'gray', text: '已取消' },

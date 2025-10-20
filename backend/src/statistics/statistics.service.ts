@@ -49,9 +49,9 @@ export class StatisticsService {
       _sum: { amount: true },
     });
 
-    // 计算交易类型分布
-    const transactionTypeStats = await this.prisma.transaction.groupBy({
-      by: ['type', 'status'],
+    // 交易类型分布改为“订单类型”分布（按订单类型聚合金额与数量）
+    const orderTypeStats = await this.prisma.order.groupBy({
+      by: ['type'],
       _count: { type: true },
       _sum: { amount: true },
     });
@@ -83,9 +83,8 @@ export class StatisticsService {
         count: stat._count.status,
         totalAmount: stat._sum.amount || 0,
       })),
-      transactionTypeDistribution: transactionTypeStats.map(stat => ({
+      transactionTypeDistribution: orderTypeStats.map(stat => ({
         type: stat.type,
-        status: stat.status,
         count: stat._count.type,
         totalAmount: stat._sum.amount || 0,
       })),

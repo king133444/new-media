@@ -26,6 +26,7 @@ import {
   ExclamationCircleOutlined,
   DeleteOutlined,
   UserAddOutlined,
+  RedoOutlined,
 } from "@ant-design/icons";
 import http, { resolveFileUrl } from "../store/api/http";
 import dayjs from "dayjs";
@@ -213,6 +214,7 @@ const OrderManagement: React.FC = () => {
     return <Tag color={config.color}>{config.text}</Tag>;
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const columns = [
     {
       title: "订单ID",
@@ -287,7 +289,7 @@ const OrderManagement: React.FC = () => {
       key: "status",
       render: (status: string) => {
         const statusMap: { [key: string]: { text: string; color: string } } = {
-          PENDING: { text: "待处理", color: "orange" },
+          PENDING: { text: "已发布", color: "orange" },
           IN_PROGRESS: { text: "进行中", color: "blue" },
           COMPLETED: { text: "已完成", color: "green" },
           CANCELLED: { text: "已取消", color: "red" },
@@ -317,13 +319,13 @@ const OrderManagement: React.FC = () => {
             查看
           </Button>
           {user?.role === "ADVERTISER" && record.status === "PENDING" && (
-            <Button
-              type="link"
-              icon={<EditOutlined />}
-              onClick={() => handleEdit(record)}
-            >
-              编辑
-            </Button>
+          <Button
+            type="link"
+            icon={<EditOutlined />}
+            onClick={() => handleEdit(record)}
+          >
+            编辑
+          </Button>
           )}
           {/* 广告主：查看申请并委派 */}
           {user?.role === "ADVERTISER" && record.status === "PENDING" && (
@@ -341,9 +343,9 @@ const OrderManagement: React.FC = () => {
                 icon={<CloseOutlined />}
                 onClick={() => handleCancelOrder(record.id)}
               >
-                取消
-              </Button>
-            )}
+              取消
+            </Button>
+          )}
           {/* 删除：仅已取消可删除（管理员/广告主） */}
           {record.status === "CANCELLED" &&
             (user?.role === "ADMIN" || user?.role === "ADVERTISER") && (
@@ -389,7 +391,7 @@ const OrderManagement: React.FC = () => {
   const handleCancelOrder = async (id: string) => {
     try {
       if (user?.role === "ADVERTISER") {
-        await http.post(`/orders/${id}/cancel`);
+      await http.post(`/orders/${id}/cancel`);
       } else if (user?.role === "CREATOR" || user?.role === "DESIGNER") {
         await http.post(`/orders/${id}/cancel-by-designer`);
       } else {
@@ -485,8 +487,8 @@ const OrderManagement: React.FC = () => {
       okText: "确认委派",
       cancelText: "取消",
       onOk: async () => {
-        try {
-          await http.post(`/orders/${orderId}/accept/${applicationId}`);
+    try {
+      await http.post(`/orders/${orderId}/accept/${applicationId}`);
           message.success("已委派给该创作者");
           try {
             wsEmit("order.application.read", { applicationId });
@@ -494,12 +496,12 @@ const OrderManagement: React.FC = () => {
           try {
             dispatch(clearApplicationNotificationsByOrderId(orderId));
           } catch {}
-          setAppModalVisible(false);
-          setAppModalOrder(null);
-          fetchOrders();
-        } catch (e: any) {
+      setAppModalVisible(false);
+      setAppModalOrder(null);
+      fetchOrders();
+    } catch (e: any) {
           message.error(e?.response?.data?.message || "委派失败");
-        }
+    }
       },
     });
   };
@@ -539,7 +541,7 @@ const OrderManagement: React.FC = () => {
               value={filters.status}
               onChange={(v) => setFilters({ ...filters, status: v })}
             >
-              <Select.Option value="PENDING">待处理</Select.Option>
+              <Select.Option value="PENDING">已发布</Select.Option>
               <Select.Option value="IN_PROGRESS">进行中</Select.Option>
               <Select.Option value="COMPLETED">已完成</Select.Option>
               <Select.Option value="CANCELLED">已取消</Select.Option>
@@ -587,24 +589,51 @@ const OrderManagement: React.FC = () => {
           >
             {orders.map((o: any) => {
               const actions: React.ReactNode[] = [
-                <EyeOutlined key={`view-${o.id}`} onClick={() => handleView(o)} />,
+                <span key={`view-${o.id}`} onClick={() => handleView(o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <EyeOutlined /> 查看
+                </span>,
               ];
               if (user?.role === "ADVERTISER" && o.status === "PENDING") {
                 actions.push(
-                  <EditOutlined key={`edit-${o.id}`} onClick={() => handleEdit(o)} />,
+                  <span key={`edit-${o.id}`} onClick={() => handleEdit(o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <EditOutlined /> 编辑
+                  </span>,
                 );
                 actions.push(
-                  <UserAddOutlined key={`assign-${o.id}`} onClick={() => openApplications(o)} />,
+                  <span key={`assign-${o.id}`} onClick={() => openApplications(o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <UserAddOutlined /> 申请/委派
+                  </span>,
+                );
+              }
+              if (user?.role === "ADVERTISER" && o.status === "CANCELLED") {
+                actions.push(
+                  <span key={`repost-${o.id}`} onClick={() => {
+                    navigate('/advertiser/ads', { state: { prefill: {
+                      title: o.title,
+                      description: o.description,
+                      type: o.type,
+                      amount: o.amount,
+                      priority: o.priority,
+                      deadline: o.deadline,
+                      tags: Array.isArray(o.tags) ? o.tags : (typeof o.tags === 'string' ? o.tags : []),
+                    } } });
+                  }} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <RedoOutlined /> 再次发布
+                  </span>,
                 );
               }
               if (user?.role !== "ADMIN" && o.status !== "CANCELLED" && o.status !== "COMPLETED") {
                 actions.push(
-                  <CloseOutlined style={{ color: "#ff4d4f" }} key={`cancel-${o.id}`} onClick={() => handleCancelOrder(o.id)} />,
+                  <span key={`cancel-${o.id}`} onClick={() => handleCancelOrder(o.id)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#ff4d4f' }}>
+                    <CloseOutlined /> 取消
+                  </span>,
                 );
               }
-              if (o.status === "CANCELLED" && (user?.role === "ADMIN" || user?.role === "ADVERTISER")) {
+              if ((o.status === "CANCELLED" || o.status === "COMPLETED") && (user?.role === "ADVERTISER" || user?.role === "CREATOR" || user?.role === "DESIGNER")) {
                 actions.push(
-                  <DeleteOutlined style={{ color: "#ff4d4f" }} key={`delete-${o.id}`} onClick={() => handleDeleteOrder(o.id)} />,
+                  <span key={`delete-${o.id}`} onClick={() => handleDeleteOrder(o.id)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#ff4d4f' }}>
+                    <DeleteOutlined /> 删除
+                  </span>,
                 );
               }
               return (
@@ -617,7 +646,7 @@ const OrderManagement: React.FC = () => {
                       o.status === "IN_PROGRESS" ? "blue" :
                       o.status === "COMPLETED" ? "green" : "red"
                     }>
-                      {o.status === "PENDING" ? "待处理" : o.status === "IN_PROGRESS" ? "进行中" : o.status === "COMPLETED" ? "已完成" : "已取消"}
+                      {o.status === "PENDING" ? "已发布" : o.status === "IN_PROGRESS" ? "进行中" : o.status === "COMPLETED" ? "已完成" : "已取消"}
                     </Tag>
                   </div>
                   <Divider style={{ margin: "12px 0" }} />
@@ -1023,22 +1052,6 @@ const OrderManagement: React.FC = () => {
                   title={
                     <span>
                       {app.user?.username || app.userId}
-                      <Tag
-                        style={{ marginLeft: 8 }}
-                        color={
-                          app?.status === "PENDING"
-                            ? "orange"
-                            : app?.status === "ACCEPTED"
-                            ? "green"
-                            : "red"
-                        }
-                      >
-                        {app?.status === "PENDING"
-                          ? "待处理"
-                          : app?.status === "ACCEPTED"
-                          ? "已接受"
-                          : "已拒绝"}
-                      </Tag>
                       {typeof app.user?.averageRating === "number" && (
                         <Tag color="blue" style={{ marginLeft: 8 }}>
                           均分 {app.user.averageRating}
@@ -1051,7 +1064,29 @@ const OrderManagement: React.FC = () => {
                       )}
                     </span>
                   }
-                  description={app.message}
+                  description={(() => {
+                    const skills = (() => {
+                      const s = app.user?.skills;
+                      if (!s) return [] as string[];
+                      try { const arr = typeof s === 'string' ? JSON.parse(s) : s; return Array.isArray(arr) ? arr : []; } catch { return []; }
+                    })();
+                    const tags = (() => {
+                      const s = app.user?.tags;
+                      if (!s) return [] as string[];
+                      try { const arr = typeof s === 'string' ? JSON.parse(s) : s; return Array.isArray(arr) ? arr : []; } catch { return []; }
+                    })();
+                    return (
+                      <div>
+                        {app.user?.bio && <div style={{ marginBottom: 4 }}>{app.user.bio}</div>}
+                        {(skills.length > 0 || tags.length > 0) && (
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            {skills.map((s: string) => (<Tag key={`skill-${s}`} color="green">{s}</Tag>))}
+                            {tags.map((t: string) => (<Tag key={`tag-${t}`} color="blue">{t}</Tag>))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 />
               </List.Item>
             )}

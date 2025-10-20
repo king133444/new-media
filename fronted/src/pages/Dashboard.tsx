@@ -542,7 +542,7 @@ const Dashboard: React.FC = () => {
       </Row>
 
       {/* 快速操作 */}
-      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+      {/* <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} lg={12}>
           <Card title="快速操作">
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
@@ -595,7 +595,7 @@ const Dashboard: React.FC = () => {
             </div>
           </Card>
         </Col>
-      </Row>
+      </Row> */}
     </div>
   );
 };

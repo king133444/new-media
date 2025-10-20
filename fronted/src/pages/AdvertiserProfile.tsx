@@ -27,7 +27,7 @@ import {
 import type { UploadProps } from 'antd';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
-import http from '../store/api/http';
+import http, { resolveFileUrl } from '../store/api/http';
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -153,17 +153,17 @@ const AdvertiserProfile: React.FC = () => {
     setTags(tags.filter(t => t !== tag));
   };
 
-  // 头像上传
+  // 头像上传（materials 接口）
   const uploadProps: UploadProps = {
-    name: 'avatar',
+    name: 'file',
     listType: 'picture-card',
     showUploadList: false,
     beforeUpload: async (file) => {
       const formData = new FormData();
-      formData.append('avatar', file);
+      formData.append('file', file);
       
     try {
-      const { data } = await http.post('/upload/avatar', formData, {
+      const { data } = await http.post('/materials/upload-avatar', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       form.setFieldsValue({ avatar: data.url });
@@ -225,7 +225,7 @@ const AdvertiserProfile: React.FC = () => {
       key: 'status',
       render: (status: string) => {
         const statusMap: { [key: string]: { text: string; color: string } } = {
-          PENDING: { text: '待处理', color: 'orange' },
+          PENDING: { text: '已发布', color: 'orange' },
           COMPLETED: { text: '已完成', color: 'green' },
           FAILED: { text: '失败', color: 'red' },
           CANCELLED: { text: '已取消', color: 'gray' },
@@ -365,7 +365,7 @@ const AdvertiserProfile: React.FC = () => {
               <Form.Item label="头像">
                 <Upload {...uploadProps}>
                   {profile?.avatar ? (
-                    <img src={profile.avatar} alt="avatar" style={{ width: '100%' }} />
+                    <img src={resolveFileUrl(profile.avatar)} alt="avatar" style={{ width: '100%' }} />
                   ) : (
                     <div>
                       <PlusOutlined />
