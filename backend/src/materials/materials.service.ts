@@ -15,7 +15,7 @@ export class MaterialsService {
   }
 
   // 保存上传的文件记录到数据库
-  async saveUploadedFiles(userId: string, orderId: string, files: any) {
+  async saveUploadedFiles(userId: string, orderId: string, files: any, kind: 'ATTACHMENT' | 'DELIVERABLE' = 'DELIVERABLE') {
     if (!files || files.length === 0) return [];
     const created = await this.prisma.$transaction(
       files.map((file) =>
@@ -23,7 +23,7 @@ export class MaterialsService {
           data: {
             url: `/uploads/materials/${file.filename}`,
             title: toUtf8FileName(file.originalname),
-            description: file.mimetype,
+            description: JSON.stringify({ mimetype: file.mimetype, kind }),
             type: 'OTHER' as any,
             status: 'ACTIVE' as any,
             userId,
@@ -32,15 +32,25 @@ export class MaterialsService {
         })
       )
     );
-    // 提交交付物后通知广告商（订单发布者）
+    // 通知：交付物→通知广告商；附件→若已委派则通知创作者
     try {
       const order = await this.prisma.order.findUnique({ where: { id: orderId } });
-      if (order?.customerId) {
+      const ts = new Date().toISOString();
+      if (!order) return created;
+      if (kind === 'DELIVERABLE' && order.customerId) {
         this.notifications.notifyUser(order.customerId, 'order.deliverables.submitted', {
           id: `deliverables-${orderId}-${Date.now()}`,
           orderId,
           count: created.length,
-          createdAt: new Date().toISOString(),
+          createdAt: ts,
+        });
+      }
+      if (kind === 'ATTACHMENT' && order.designerId) {
+        this.notifications.notifyUser(order.designerId, 'order.attachment.uploaded', {
+          id: `attachment-${orderId}-${Date.now()}`,
+          orderId,
+          count: created.length,
+          createdAt: ts,
         });
       }
     } catch {}

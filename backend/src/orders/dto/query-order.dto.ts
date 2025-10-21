@@ -28,7 +28,7 @@ export class QueryOrderDto {
   @IsOptional()
   status?: OrderStatus;
 
-  @ApiProperty({ description: '优先级', enum: Priority, required: false })
+  @ApiProperty({ description: '紧急程度', enum: Priority, required: false })
   @IsEnum(Priority)
   @IsOptional()
   priority?: Priority;

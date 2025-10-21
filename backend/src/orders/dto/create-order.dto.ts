@@ -27,7 +27,7 @@ export class CreateOrderDto {
   @IsOptional()
   budget?: number;
 
-  @ApiProperty({ description: '优先级', enum: Priority, example: 'HIGH', required: false })
+  @ApiProperty({ description: '紧急程度', enum: Priority, example: 'HIGH', required: false })
   @IsEnum(Priority)
   @IsOptional()
   priority?: Priority;

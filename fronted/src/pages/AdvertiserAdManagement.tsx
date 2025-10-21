@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Form, Input, InputNumber, DatePicker, Select, Button, message } from 'antd';
+import { Card, Form, Input, InputNumber, DatePicker, Select, Button, message, Upload } from 'antd';
 import ordersApi, { CreateOrderPayload } from '../store/api/ordersApi';
+import http from '../store/api/http';
 import dayjs from 'dayjs';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -12,6 +13,7 @@ const AdvertiserAdManagement: React.FC = () => {
   const [form] = Form.useForm<any>();
   const location = useLocation();
   const navigate = useNavigate();
+  const [attachFiles, setAttachFiles] = useState<any[]>([]);
 
   const onFinish = async (values: any) => {
     try {
@@ -29,9 +31,25 @@ const AdvertiserAdManagement: React.FC = () => {
         deadline: values.deadline ? (values.deadline as dayjs.Dayjs).toISOString() : undefined,
         tags: JSON.stringify(tagsArray),
       } as any;
-      await ordersApi.create(payload);
-      message.success('订单创建成功');
+      const created = await ordersApi.create(payload);
+      // 若创建时已选择附件，则在创建成功后立即上传到该订单
+      if (attachFiles.length > 0 && created?.id) {
+        const formData = new FormData();
+        (attachFiles || []).forEach((f: any) => { if (f.originFileObj) formData.append('files', f.originFileObj); });
+        try {
+          await http.post(`/materials/upload`, formData, {
+            params: { orderId: created.id, kind: 'ATTACHMENT' },
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+          message.success('订单创建成功，附件已上传');
+        } catch (e: any) {
+          message.warning('订单创建成功，但附件上传失败');
+        }
+      } else {
+        message.success('订单创建成功');
+      }
       form.resetFields();
+      setAttachFiles([]);
       navigate('/orders');
     } catch (e: any) {
       message.error(e?.response?.data?.message || '创建失败');
@@ -84,7 +102,7 @@ const AdvertiserAdManagement: React.FC = () => {
 
         {/* 预算上限已移除 */}
 
-        <Form.Item name="priority" label="优先级">
+        <Form.Item name="priority" label="紧急程度">
           <Select placeholder="可选">
             <Option value="HIGH">高</Option>
             <Option value="MEDIUM">中</Option>
@@ -100,6 +118,18 @@ const AdvertiserAdManagement: React.FC = () => {
 
         <Form.Item name="tagsInput" label="标签（以空格分割）">
           <Input placeholder="示例：剪辑 AE PS 宣传" />
+        </Form.Item>
+
+        {/* 预上传附件（创建成功后自动归属到该订单） */}
+        <Form.Item label="附件（可选）">
+          <Upload
+            multiple
+            fileList={attachFiles}
+            beforeUpload={() => false}
+            onChange={({ fileList }) => setAttachFiles(fileList)}
+          >
+            <Button>选择附件</Button>
+          </Upload>
         </Form.Item>
 
         <Form.Item>

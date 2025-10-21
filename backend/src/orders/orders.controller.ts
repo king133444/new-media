@@ -128,6 +128,13 @@ export class OrdersController {
     return this.ordersService.getDeliverables(orderId, req.user.userId, req.user.role);
   }
 
+  @Get(':id/attachments')
+  @ApiOperation({ summary: '查看订单附件列表（双方可见）' })
+  @ApiResponse({ status: 200, description: '获取成功' })
+  getAttachments(@Request() req, @Param('id') orderId: string) {
+    return this.ordersService.getAttachments(orderId, req.user.userId, req.user.role);
+  }
+
   @Post(':id/confirm-receipt')
   @ApiOperation({ summary: '确认收货并放款（广告商）' })
   @ApiResponse({ status: 200, description: '已确认收货并放款' })

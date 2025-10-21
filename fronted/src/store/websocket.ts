@@ -84,9 +84,11 @@ export function connectWebSocket(token: string) {
     const notifyEvents = new Set([
       'order.application.created',
       'order.application.accepted',
+      'order.attachment.uploaded',
       'order.deliverables.submitted',
       'order.payout.released',
       'order.cancelled.by.designer',
+      'order.cancelled.by.advertiser',
       'reviews.cta',
       'review.created',
       'communication.message',
@@ -97,8 +99,10 @@ export function connectWebSocket(token: string) {
 
   socket.on('order.application.created', handleEvent('order.application.created'));
   socket.on('order.application.accepted', handleEvent('order.application.accepted'));
+  socket.on('order.attachment.uploaded', handleEvent('order.attachment.uploaded'));
   socket.on('order.deliverables.submitted', handleEvent('order.deliverables.submitted'));
   socket.on('order.payout.released', handleEvent('order.payout.released'));
+  socket.on('order.cancelled.by.advertiser', handleEvent('order.cancelled.by.advertiser'));
   socket.on('reviews.cta', handleEvent('reviews.cta'));
   socket.on('order.cancelled.by.designer', handleEvent('order.cancelled.by.designer'));
   socket.on('communication.message', handleEvent('communication.message'));

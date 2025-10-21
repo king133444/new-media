@@ -19,6 +19,7 @@ import {
   Upload,
   Divider,
 } from "antd";
+import { Collapse } from "antd";
 import {
   EditOutlined,
   EyeOutlined,
@@ -54,6 +55,14 @@ const OrderManagement: React.FC = () => {
   const [viewOrder, setViewOrder] = useState<any | null>(null);
   const [deliverFiles, setDeliverFiles] = useState<any[]>([]);
   const [submittingDeliver, setSubmittingDeliver] = useState(false);
+  const [attachFiles, setAttachFiles] = useState<any[]>([]);
+  const [submittingAttach, setSubmittingAttach] = useState(false);
+  const [attachmentsList, setAttachmentsList] = useState<any[]>([]);
+  const [attachmentsLoading, setAttachmentsLoading] = useState(false);
+  const [deliverablesList, setDeliverablesList] = useState<any[]>([]);
+  const [deliverablesLoading, setDeliverablesLoading] = useState(false);
+  const [attActive, setAttActive] = useState<string[]>([]);
+  const [devActive, setDevActive] = useState<string[]>([]);
 
   const { user } = useSelector((state: RootState) => state.auth);
   const dispatch = useDispatch<AppDispatch>();
@@ -293,7 +302,7 @@ const OrderManagement: React.FC = () => {
       render: (amount: number) => `¥${amount}`,
     },
     {
-      title: "优先级",
+      title: "紧急程度",
       dataIndex: "priority",
       key: "priority",
       render: (priority: string) => {
@@ -410,9 +419,25 @@ const OrderManagement: React.FC = () => {
     setIsModalVisible(true);
   };
 
-  const handleView = (order: any) => {
+  const handleView = async (order: any) => {
     setViewOrder(order);
     setViewVisible(true);
+    // 打开详情时预拉附件与交付物
+    try {
+      setAttachmentsLoading(true);
+      const [attRes, devRes] = await Promise.all([
+        http.get(`/orders/${order.id}/attachments`).catch(() => ({ data: [] })),
+        order.status !== 'PENDING' ? http.get(`/orders/${order.id}/deliverables`).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
+      ]);
+      setAttachmentsList(attRes.data || []);
+      setDeliverablesList(devRes.data || []);
+    } finally {
+      setAttachmentsLoading(false);
+      setDeliverablesLoading(false);
+    }
+    // 默认折叠关闭
+    setAttActive([]);
+    setDevActive([]);
   };
 
   const handleCancelOrder = async (id: string) => {
@@ -697,7 +722,7 @@ const OrderManagement: React.FC = () => {
       <Drawer
         title={viewOrder ? `订单详情：${viewOrder.title}` : "订单详情"}
         open={viewVisible}
-        onClose={() => setViewVisible(false)}
+        onClose={() => { setViewVisible(false); setAttActive([]); setDevActive([]); setAttachmentsList([]); setDeliverablesList([]); }}
         width={720}
       >
         {viewOrder && (
@@ -815,13 +840,13 @@ const OrderManagement: React.FC = () => {
                     <div>{viewOrder.customer?.username || "-"}</div>
                   </div>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {viewOrder.designer && <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <Avatar src={resolveFileUrl(viewOrder.designer?.avatar)} />
                   <div>
                     <div style={{ fontWeight: 600 }}>设计师</div>
                     <div>{viewOrder.designer?.username || "-"}</div>
                   </div>
-                </div>
+                </div>}
               </Space>
             </Card>
 
@@ -859,102 +884,181 @@ const OrderManagement: React.FC = () => {
               );
             })()}
 
-            {/* 交付物列表与确认收货 */}
-            <Card title="交付物">
-              <Button
-                size="small"
-                onClick={async () => {
-                  if (!viewOrder) return;
-                  try {
-                    const { data } = await http.get(
-                      `/orders/${viewOrder.id}/deliverables`
-                    );
-                    Modal.info({
-                      title: "交付物列表",
-                      width: 700,
-                      content: (
-                        <List
-                          dataSource={data || []}
-                          renderItem={(item: any) => (
-                            <List.Item>
-                              <List.Item.Meta
-                                avatar={<Avatar src={resolveFileUrl(item.user?.avatar)} />}
-                                title={
-                                  <a
-                                    role="button"
-                                    onClick={async (e) => {
-                                      e.preventDefault();
-                                      try {
-                                        const resp = await http.get(`/materials/${item.id}/preview`, { responseType: 'blob' });
-                                        const blob = new Blob([resp.data]);
-                                        const filename = item.title || `material-${item.id}`;
-                                        const nav: any = window.navigator;
-                                        if (nav && typeof nav.msSaveOrOpenBlob === 'function') {
-                                          nav.msSaveOrOpenBlob(blob, filename);
-                                          return;
-                                        }
-                                        const url = window.URL.createObjectURL(blob);
-                                        const a = document.createElement('a');
-                                        a.href = url;
-                                        a.download = filename;
-                                        document.body.appendChild(a);
-                                        a.click();
-                                        a.remove();
-                                        window.URL.revokeObjectURL(url);
-                                      } catch (err) {
-                                        message.error('下载失败');
-                                      }
-                                    }}
-                                    href="#!"
-                                  >
-                                    {item.title || item.url}
-                                  </a>
-                                }
-                                description={item.description || item.type}
-                              />
-                              <div>
-                                {dayjs(item.createdAt).format(
-                                  "YYYY-MM-DD HH:mm"
-                                )}
-                              </div>
-                            </List.Item>
-                          )}
-                          locale={{ emptyText: "暂无交付物" }}
-                        />
-                      ),
-                    });
-                  } catch (e: any) {
-                    message.error(
-                      e?.response?.data?.message || "获取交付物失败"
-                    );
-                  }
-                }}
-              >
-                查看交付物
-              </Button>
-
-              {user?.role === "ADVERTISER" &&
-                viewOrder.status === "IN_PROGRESS" && (
+            {/* 附件（广告商在发布前/后均可上传；双方可见） */}
+            <Card
+              title="附件"
+              extra={user?.role === 'ADVERTISER' && (
+                <Space>
+                  <Upload multiple fileList={attachFiles} beforeUpload={() => false} onChange={({ fileList }) => setAttachFiles(fileList)}>
+                    <Button size="small">添加附件</Button>
+                  </Upload>
                   <Button
+                    size="small"
                     type="primary"
-                    style={{ marginLeft: 12 }}
+                    loading={submittingAttach}
+                    disabled={!attachFiles.length}
                     onClick={async () => {
+                      if (!viewOrder) return;
+                      setSubmittingAttach(true);
                       try {
-                        await http.post(
-                          `/orders/${viewOrder.id}/confirm-receipt`
-                        );
-                        message.success("已确认收货并放款");
-                        setViewVisible(false);
-                        fetchOrders();
+                        const formData = new FormData();
+                        (attachFiles || []).forEach((f: any) => { if (f.originFileObj) formData.append('files', f.originFileObj); });
+                        await http.post(`/materials/upload`, formData, {
+                          params: { orderId: viewOrder.id, kind: 'ATTACHMENT' },
+                          headers: { 'Content-Type': 'multipart/form-data' },
+                        });
+                        message.success('附件已上传');
+                        setAttachFiles([]);
+                        // 刷新列表
+                        try {
+                          setAttachmentsLoading(true);
+                          const { data } = await http.get(`/orders/${viewOrder.id}/attachments`);
+                          setAttachmentsList(data || []);
+                        } finally { setAttachmentsLoading(false); }
                       } catch (e: any) {
-                        message.error(e?.response?.data?.message || "操作失败");
+                        message.error(e?.response?.data?.message || '上传失败');
+                      } finally {
+                        setSubmittingAttach(false);
                       }
                     }}
-                  >
-                    确认收货并放款
-                  </Button>
-                )}
+                  >提交</Button>
+                </Space>
+              )}
+            >
+              <Collapse
+                bordered={false}
+                activeKey={attActive}
+                onChange={(keys) => setAttActive(Array.isArray(keys) ? keys as string[] : [keys as string])}
+              >
+                <Collapse.Panel header={<span>附件列表 {attachmentsList?.length ? `(${attachmentsList.length})` : ''}</span>} key="att">
+                  {attachmentsLoading ? (
+                    <div>加载中...</div>
+                  ) : (
+                    <List
+                      dataSource={attachmentsList}
+                      renderItem={(item: any) => (
+                        <List.Item>
+                          <List.Item.Meta
+                            avatar={<Avatar src={resolveFileUrl(item.user?.avatar)} />}
+                            title={
+                              <a role="button" onClick={async (e) => {
+                                e.preventDefault();
+                                try {
+                                  const resp = await http.get(`/materials/${item.id}/preview`, { responseType: 'blob' });
+                                  const blob = new Blob([resp.data]);
+                                  const filename = item.title || `attachment-${item.id}`;
+                                  const nav: any = window.navigator;
+                                  if (nav && typeof nav.msSaveOrOpenBlob === 'function') { nav.msSaveOrOpenBlob(blob, filename); return; }
+                                  const url = window.URL.createObjectURL(blob);
+                                  const a = document.createElement('a');
+                                  a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+                                  window.URL.revokeObjectURL(url);
+                                } catch { message.error('下载失败'); }
+                              }} href="#!">{item.title || item.url}</a>
+                            }
+                            description={dayjs(item.createdAt).format('YYYY-MM-DD HH:mm')}
+                          />
+                        </List.Item>
+                      )}
+                      locale={{ emptyText: '暂无附件' }}
+                    />
+                  )}
+                </Collapse.Panel>
+              </Collapse>
             </Card>
+
+            {/* 交付物列表与确认收货（仅委派后显示） */}
+            {(viewOrder.status !== 'PENDING') && (
+            <Card
+              title="交付物"
+              extra={(user?.role !== 'ADVERTISER' && viewOrder.designer?.id === user?.id) && (
+                <Space>
+                  <Upload multiple fileList={deliverFiles} beforeUpload={() => false} onChange={({ fileList }) => setDeliverFiles(fileList)}>
+                    <Button size="small">添加交付物</Button>
+                  </Upload>
+                  <Button
+                    size="small"
+                    type="primary"
+                    loading={submittingDeliver}
+                    disabled={!deliverFiles.length}
+                    onClick={async () => {
+                      if (!viewOrder) return;
+                      setSubmittingDeliver(true);
+                      try {
+                        const form = new FormData();
+                        deliverFiles.forEach((f: any) => { const raw = f.originFileObj || f; if (raw) form.append('files', raw as Blob, f.name); });
+                        await http.post(`/materials/upload?orderId=${viewOrder.id}`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+                        message.success('交付物已上传');
+                        setDeliverFiles([]);
+                        // 刷新列表
+                        try {
+                          setDeliverablesLoading(true);
+                          const { data } = await http.get(`/orders/${viewOrder.id}/deliverables`);
+                          setDeliverablesList(data || []);
+                        } finally { setDeliverablesLoading(false); }
+                      } catch (e: any) { message.error(e?.response?.data?.message || '上传失败'); } finally { setSubmittingDeliver(false); }
+                    }}
+                  >提交</Button>
+                </Space>
+              )}
+            >
+              <Collapse
+                bordered={false}
+                activeKey={devActive}
+                onChange={(keys) => setDevActive(Array.isArray(keys) ? keys as string[] : [keys as string])}
+              >
+                <Collapse.Panel header={<span>交付物列表 {deliverablesList?.length ? `(${deliverablesList.length})` : ''}</span>} key="dev">
+                  {deliverablesLoading ? (
+                    <div>加载中...</div>
+                  ) : (
+                    <List
+                      dataSource={deliverablesList}
+                      renderItem={(item: any) => (
+                        <List.Item>
+                          <List.Item.Meta
+                            avatar={<Avatar src={resolveFileUrl(item.user?.avatar)} />}
+                            title={
+                              <a role="button" onClick={async (e) => {
+                                e.preventDefault();
+                                try {
+                                  const resp = await http.get(`/materials/${item.id}/preview`, { responseType: 'blob' });
+                                  const blob = new Blob([resp.data]);
+                                  const filename = item.title || `material-${item.id}`;
+                                  const nav: any = window.navigator;
+                                  if (nav && typeof nav.msSaveOrOpenBlob === 'function') { nav.msSaveOrOpenBlob(blob, filename); return; }
+                                  const url = window.URL.createObjectURL(blob);
+                                  const a = document.createElement('a');
+                                  a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+                                  window.URL.revokeObjectURL(url);
+                                } catch { message.error('下载失败'); }
+                              }} href="#!">{item.title || item.url}</a>
+                            }
+                            description={dayjs(item.createdAt).format('YYYY-MM-DD HH:mm')}
+                          />
+                        </List.Item>
+                      )}
+                      locale={{ emptyText: '暂无交付物' }}
+                    />
+                  )}
+                </Collapse.Panel>
+              </Collapse>
+
+              {user?.role === "ADVERTISER" && viewOrder.status === "IN_PROGRESS" && (
+                <Button
+                  type="primary"
+                  style={{ marginTop: 12 }}
+                  onClick={async () => {
+                    try {
+                      await http.post(`/orders/${viewOrder.id}/confirm-receipt`);
+                      message.success("已确认收货并放款");
+                      setViewVisible(false);
+                      fetchOrders();
+                    } catch (e: any) { message.error(e?.response?.data?.message || "操作失败"); }
+                  }}
+                >确认收货并放款</Button>
+              )}
+            </Card>
+            )}
           </Space>
         )}
       </Drawer>
@@ -1009,10 +1113,10 @@ const OrderManagement: React.FC = () => {
 
           <Form.Item
             name="priority"
-            label="优先级"
-            rules={[{ required: true, message: "请选择优先级" }]}
+            label="紧急程度"
+            rules={[{ required: true, message: "请选择紧急程度" }]}
           >
-            <Select placeholder="请选择优先级">
+            <Select placeholder="请选择紧急程度">
               <Select.Option value="HIGH">高</Select.Option>
               <Select.Option value="MEDIUM">中</Select.Option>
               <Select.Option value="LOW">低</Select.Option>

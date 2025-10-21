@@ -328,14 +328,20 @@ export class OrdersService {
     if (!isOwner) {
       throw new ForbiddenException("无权删除此订单");
     }
+console.log('order.status',order.status);
 
     // 仅允许删除 已取消/已完成 的订单
     if (!(order.status === OrderStatus.CANCELLED || order.status === OrderStatus.COMPLETED)) {
       throw new BadRequestException("仅已取消或已完成的订单可删除");
     }
 
-    return this.prisma.order.delete({
-      where: { id },
+    // 级联删除：先清理依赖本订单的记录，最后删除订单本身
+    return this.prisma.$transaction(async (tx) => {
+      await tx.orderApplication.deleteMany({ where: { orderId: id } });
+      await tx.material.deleteMany({ where: { orderId: id } });
+      await tx.review.deleteMany({ where: { orderId: id } });
+      await tx.transaction.deleteMany({ where: { orderId: id } });
+      return tx.order.delete({ where: { id } });
     });
   }
 
@@ -480,7 +486,7 @@ export class OrdersService {
     ) {
       throw new ForbiddenException("无权查看该订单交付物");
     }
-    return this.prisma.material.findMany({
+    const list = await this.prisma.material.findMany({
       where: { orderId },
       orderBy: { createdAt: "desc" },
       select: {
@@ -492,6 +498,49 @@ export class OrdersService {
         createdAt: true,
         user: { select: { id: true, username: true, avatar: true } },
       },
+    });
+    // 过滤出交付物（kind=DELIVERABLE），兼容历史无 kind 数据：默认当作交付物处理
+    return list.filter((m: any) => {
+      try {
+        const meta = JSON.parse(m.description || '{}');
+        if (meta && meta.kind) return meta.kind === 'DELIVERABLE';
+      } catch {}
+      return true;
+    });
+  }
+
+  // 查看附件列表（双方可见）
+  async getAttachments(orderId: string, userId: string, role?: string) {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException("订单不存在");
+    if (
+      role !== "ADMIN" &&
+      order.customerId !== userId &&
+      (order.designerId !== null && order.designerId !== userId)
+    ) {
+      throw new ForbiddenException("无权查看该订单附件");
+    }
+    
+    const list = await this.prisma.material.findMany({
+      where: { orderId },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        url: true,
+        title: true,
+        description: true,
+        type: true,
+        createdAt: true,
+        user: { select: { id: true, username: true, avatar: true } },
+      },
+    });
+    return list.filter((m: any) => {
+      try {
+        const meta = JSON.parse(m.description || '{}');
+        return meta && meta.kind === 'ATTACHMENT';
+      } catch {
+        return false;
+      }
     });
   }
 
@@ -737,12 +786,22 @@ export class OrdersService {
       order.status === OrderStatus.IN_PROGRESS
     ) {
       // 仍走取消流程
-      return this.prisma.order.update({
+      const updated = await this.prisma.order.update({
         where: { id },
-        data: {
-          status: OrderStatus.CANCELLED,
-        },
+        data: { status: OrderStatus.CANCELLED },
       });
+      // 若已有受委派者，通知创作者订单被广告商取消
+      try {
+        if (order.designerId) {
+          this.notifications.notifyUser(order.designerId, 'order.cancelled.by.advertiser', {
+            id: `order-cancelled-by-advertiser-${order.id}`,
+            orderId: order.id,
+            amount: order.amount,
+            createdAt: new Date().toISOString(),
+          });
+        }
+      } catch {}
+      return updated;
     }
     // 已完成允许删除
     if (order.status === OrderStatus.COMPLETED) {

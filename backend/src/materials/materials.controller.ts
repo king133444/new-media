@@ -39,9 +39,10 @@ export class MaterialsController {
     @Request() req,
     @UploadedFiles() files: any,
     @Query('orderId') orderId?: string,
+    @Query('kind') kind?: 'ATTACHMENT' | 'DELIVERABLE',
   ) {
-    // 将上传的文件保存记录到数据库
-    const created = await this.materialsService.saveUploadedFiles(req.user.userId, orderId as string, files || []);
+    // 将上传的文件保存记录到数据库（kind: ATTACHMENT | DELIVERABLE）
+    const created = await this.materialsService.saveUploadedFiles(req.user.userId, orderId as string, files || [], kind);
     return created;
   }
 

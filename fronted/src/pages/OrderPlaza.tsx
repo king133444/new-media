@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Card,
   Button,
@@ -17,19 +17,21 @@ import {
   Tooltip,
   Empty,
   InputNumber,
-} from 'antd';
+} from "antd";
+import { List } from "antd";
+import { Collapse } from "antd";
 import {
   EyeOutlined,
   SendOutlined,
   UserOutlined,
   FilterOutlined,
   SearchOutlined,
-} from '@ant-design/icons';
-import dayjs from 'dayjs';
-import type { ColumnsType } from 'antd/es/table';
-import { useSelector } from 'react-redux';
-import { RootState } from '../store';
-import http, { resolveFileUrl } from '../store/api/http';
+} from "@ant-design/icons";
+import dayjs from "dayjs";
+import type { ColumnsType } from "antd/es/table";
+import { useSelector } from "react-redux";
+import { RootState } from "../store";
+import http, { resolveFileUrl } from "../store/api/http";
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -69,13 +71,15 @@ const OrderPlaza: React.FC = () => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [viewModalVisible, setViewModalVisible] = useState(false);
   const [applyModalVisible, setApplyModalVisible] = useState(false);
+  const [attachments, setAttachments] = useState<any[]>([]);
+  const [attLoading, setAttLoading] = useState(false);
   const [applyForm] = Form.useForm();
   const [filters, setFilters] = useState({
-    type: '',
-    priority: '',
+    type: "",
+    priority: "",
     minAmount: 0,
     maxAmount: undefined as number | undefined,
-    keyword: '',
+    keyword: "",
   });
 
   const { user } = useSelector((state: RootState) => state.auth);
@@ -85,16 +89,18 @@ const OrderPlaza: React.FC = () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (filters.type) params.append('type', filters.type);
-      if (filters.priority) params.append('priority', filters.priority);
-      if (filters.minAmount !== undefined) params.append('minAmount', filters.minAmount?.toString());
-      if (filters.maxAmount !== undefined) params.append('maxAmount', filters.maxAmount?.toString());
-      if (filters.keyword) params.append('keyword', filters.keyword);
+      if (filters.type) params.append("type", filters.type);
+      if (filters.priority) params.append("priority", filters.priority);
+      if (filters.minAmount !== undefined)
+        params.append("minAmount", filters.minAmount?.toString());
+      if (filters.maxAmount !== undefined)
+        params.append("maxAmount", filters.maxAmount?.toString());
+      if (filters.keyword) params.append("keyword", filters.keyword);
 
       const { data } = await http.get(`/orders?${params.toString()}`);
       setOrders(data.data || []);
     } catch (error) {
-      message.error('获取订单列表失败');
+      message.error("获取订单列表失败");
     } finally {
       setLoading(false);
     }
@@ -112,12 +118,12 @@ const OrderPlaza: React.FC = () => {
       await http.post(`/orders/${selectedOrder.id}/apply`, {
         message: values.message,
       });
-      message.success('申请提交成功');
+      message.success("申请提交成功");
       setApplyModalVisible(false);
       applyForm.resetFields();
       fetchOrders();
     } catch (error: any) {
-      message.error(error?.response?.data?.message || '申请失败');
+      message.error(error?.response?.data?.message || "申请失败");
     }
   };
 
@@ -127,61 +133,72 @@ const OrderPlaza: React.FC = () => {
       const { data } = await http.get(`/orders/${order.id}`);
       setSelectedOrder(data);
       setViewModalVisible(true);
+      // 拉取附件列表
+      setAttLoading(true);
+      try {
+        const att = await http.get(`/orders/${order.id}/attachments`);
+        setAttachments(att.data || []);
+      } catch {
+      } finally {
+        setAttLoading(false);
+      }
     } catch (error: any) {
-      message.error(error?.response?.data?.message || '获取订单详情失败');
+      message.error(error?.response?.data?.message || "获取订单详情失败");
     }
   };
 
   // 获取状态标签
   const getStatusTag = (status: string) => {
     const statusMap: { [key: string]: { color: string; text: string } } = {
-      PENDING: { color: 'orange', text: '待接单' },
-      IN_PROGRESS: { color: 'blue', text: '进行中' },
-      COMPLETED: { color: 'green', text: '已完成' },
-      CANCELLED: { color: 'red', text: '已取消' },
+      PENDING: { color: "orange", text: "待接单" },
+      IN_PROGRESS: { color: "blue", text: "进行中" },
+      COMPLETED: { color: "green", text: "已完成" },
+      CANCELLED: { color: "red", text: "已取消" },
     };
-    const config = statusMap[status] || { color: 'default', text: status };
+    const config = statusMap[status] || { color: "default", text: status };
     return <Tag color={config.color}>{config.text}</Tag>;
   };
 
-  // 获取优先级标签
+  // 获取紧急程度标签
   const getPriorityTag = (priority: string) => {
     const priorityMap: { [key: string]: { color: string; text: string } } = {
-      LOW: { color: 'green', text: '低' },
-      MEDIUM: { color: 'blue', text: '中' },
-      HIGH: { color: 'orange', text: '高' },
-      URGENT: { color: 'red', text: '紧急' },
+      LOW: { color: "green", text: "低" },
+      MEDIUM: { color: "blue", text: "中" },
+      HIGH: { color: "orange", text: "高" },
+      URGENT: { color: "red", text: "紧急" },
     };
-    const config = priorityMap[priority] || { color: 'default', text: priority };
+    const config = priorityMap[priority] || {
+      color: "default",
+      text: priority,
+    };
     return <Tag color={config.color}>{config.text}</Tag>;
   };
-console.log('se', selectedOrder);
 
   // 获取类型标签
   const getTypeTag = (type: string) => {
     const typeMap: { [key: string]: { color: string; text: string } } = {
-      VIDEO: { color: 'purple', text: '视频' },
-      DESIGN: { color: 'cyan', text: '设计' },
-      H5: { color: 'blue', text: 'H5' },
-      ANIMATION: { color: 'orange', text: '动画' },
-      AUDIO: { color: 'green', text: '音频' },
-      OTHER: { color: 'default', text: '其他' },
+      VIDEO: { color: "purple", text: "视频" },
+      DESIGN: { color: "cyan", text: "设计" },
+      H5: { color: "blue", text: "H5" },
+      ANIMATION: { color: "orange", text: "动画" },
+      AUDIO: { color: "green", text: "音频" },
+      OTHER: { color: "default", text: "其他" },
     };
-    const config = typeMap[type] || { color: 'default', text: type };
+    const config = typeMap[type] || { color: "default", text: type };
     return <Tag color={config.color}>{config.text}</Tag>;
   };
 
   const columns: ColumnsType<Order> = [
     {
-      title: '订单信息',
-      key: 'orderInfo',
+      title: "订单信息",
+      key: "orderInfo",
       width: 300,
       render: (_, record) => (
         <div>
           <Title level={5} style={{ margin: 0, marginBottom: 4 }}>
             {record.title}
           </Title>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
             {getTypeTag(record.type)}
             {getPriorityTag(record.priority)}
           </div>
@@ -192,13 +209,13 @@ console.log('se', selectedOrder);
       ),
     },
     {
-      title: '金额',
-      dataIndex: 'amount',
-      key: 'amount',
+      title: "金额",
+      dataIndex: "amount",
+      key: "amount",
       width: 120,
       render: (amount, record) => (
         <div>
-          <Text strong style={{ fontSize: 16, color: '#1890ff' }}>
+          <Text strong style={{ fontSize: 16, color: "#1890ff" }}>
             ¥{amount.toFixed(2)}
           </Text>
           {record.budget && (
@@ -212,12 +229,16 @@ console.log('se', selectedOrder);
       ),
     },
     {
-      title: '广告商',
-      key: 'customer',
+      title: "广告商",
+      key: "customer",
       width: 150,
       render: (_, record) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Avatar src={resolveFileUrl(record.customer.avatar)} icon={<UserOutlined />} size="small" />
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Avatar
+            src={resolveFileUrl(record.customer.avatar)}
+            icon={<UserOutlined />}
+            size="small"
+          />
           <div>
             <Text strong>{record.customer.username}</Text>
             {record.customer.company && (
@@ -232,25 +253,25 @@ console.log('se', selectedOrder);
       ),
     },
     {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
+      title: "状态",
+      dataIndex: "status",
+      key: "status",
       width: 100,
       render: (status) => getStatusTag(status),
     },
     {
-      title: '截止时间',
-      dataIndex: 'deadline',
-      key: 'deadline',
+      title: "截止时间",
+      dataIndex: "deadline",
+      key: "deadline",
       width: 120,
       render: (deadline) => (
         <div>
           {deadline ? (
             <>
-              <Text>{dayjs(deadline).format('MM-DD')}</Text>
+              <Text>{dayjs(deadline).format("MM-DD")}</Text>
               <div>
                 <Text type="secondary" style={{ fontSize: 12 }}>
-                  {dayjs(deadline).format('HH:mm')}
+                  {dayjs(deadline).format("HH:mm")}
                 </Text>
               </div>
             </>
@@ -261,28 +282,26 @@ console.log('se', selectedOrder);
       ),
     },
     {
-      title: '申请数',
-      dataIndex: ['_count', 'applications'],
-      key: 'applications',
+      title: "申请数",
+      dataIndex: ["_count", "applications"],
+      key: "applications",
       width: 80,
-      render: (count) => (
-        <Tag color="blue">{count} 个申请</Tag>
-      ),
+      render: (count) => <Tag color="blue">{count} 个申请</Tag>,
     },
     {
-      title: '发布时间',
-      dataIndex: 'createdAt',
-      key: 'createdAt',
+      title: "发布时间",
+      dataIndex: "createdAt",
+      key: "createdAt",
       width: 100,
       render: (date) => (
         <Text type="secondary" style={{ fontSize: 12 }}>
-          {dayjs(date).format('MM-DD HH:mm')}
+          {dayjs(date).format("MM-DD HH:mm")}
         </Text>
       ),
     },
     {
-      title: '操作',
-      key: 'action',
+      title: "操作",
+      key: "action",
       width: 120,
       render: (_, record) => (
         <Space>
@@ -293,10 +312,10 @@ console.log('se', selectedOrder);
               onClick={() => viewOrderDetail(record)}
             />
           </Tooltip>
-          {record.status === 'PENDING' && (
+          {record.status === "PENDING" &&
             (() => {
               const alreadyApplied = Array.isArray(record.applications)
-                ? !!record.applications?.some(app => app.userId === user?.id)
+                ? !!record.applications?.some((app) => app.userId === user?.id)
                 : false;
               if (alreadyApplied) {
                 return <Tag color="default">已申请</Tag>;
@@ -314,20 +333,26 @@ console.log('se', selectedOrder);
                   申请
                 </Button>
               );
-            })()
-          )}
+            })()}
         </Space>
       ),
     },
   ];
 
-  if (user?.role !== 'CREATOR' && user?.role !== 'DESIGNER') {
+  if (user?.role !== "CREATOR" && user?.role !== "DESIGNER") {
     return <div>您没有权限访问此页面</div>;
   }
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 16,
+        }}
+      >
         <Title level={2}>订单广场</Title>
         <Text type="secondary">发现合适的项目，展示您的才华</Text>
       </div>
@@ -340,7 +365,7 @@ console.log('se', selectedOrder);
               <Text type="secondary">类型</Text>
             </div>
             <Select
-              style={{ width: '100%' }}
+              style={{ width: "100%" }}
               value={filters.type}
               onChange={(value) => setFilters({ ...filters, type: value })}
               allowClear
@@ -355,10 +380,10 @@ console.log('se', selectedOrder);
           </Col>
           <Col xs={24} sm={12} md={6}>
             <div style={{ marginBottom: 4 }}>
-              <Text type="secondary">优先级</Text>
+              <Text type="secondary">紧急程度</Text>
             </div>
             <Select
-              style={{ width: '100%' }}
+              style={{ width: "100%" }}
               value={filters.priority}
               onChange={(value) => setFilters({ ...filters, priority: value })}
               allowClear
@@ -374,9 +399,11 @@ console.log('se', selectedOrder);
               <Text type="secondary">最小金额</Text>
             </div>
             <InputNumber
-              style={{ width: '100%' }}
+              style={{ width: "100%" }}
               value={filters.minAmount}
-              onChange={(value) => setFilters({ ...filters, minAmount: value ?? 0 })}
+              onChange={(value) =>
+                setFilters({ ...filters, minAmount: value ?? 0 })
+              }
               min={0}
             />
           </Col>
@@ -385,9 +412,14 @@ console.log('se', selectedOrder);
               <Text type="secondary">最大金额</Text>
             </div>
             <InputNumber
-              style={{ width: '100%' }}
+              style={{ width: "100%" }}
               value={filters.maxAmount}
-              onChange={(value) => setFilters({ ...filters, maxAmount: value === null ? undefined : value })}
+              onChange={(value) =>
+                setFilters({
+                  ...filters,
+                  maxAmount: value === null ? undefined : value,
+                })
+              }
               min={0}
             />
           </Col>
@@ -400,11 +432,18 @@ console.log('se', selectedOrder);
             <Input
               prefix={<SearchOutlined />}
               value={filters.keyword}
-              onChange={(e) => setFilters({ ...filters, keyword: e.target.value })}
+              onChange={(e) =>
+                setFilters({ ...filters, keyword: e.target.value })
+              }
             />
           </Col>
           <Col xs={24} sm={8} md={6}>
-            <Button type="primary" icon={<FilterOutlined />} onClick={fetchOrders} block>
+            <Button
+              type="primary"
+              icon={<FilterOutlined />}
+              onClick={fetchOrders}
+              block
+            >
               筛选
             </Button>
           </Col>
@@ -423,7 +462,8 @@ console.log('se', selectedOrder);
             pageSize: 10,
             showSizeChanger: true,
             showQuickJumper: true,
-            showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
+            showTotal: (total, range) =>
+              `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
           }}
           locale={{ emptyText: <Empty description="暂无订单" /> }}
         />
@@ -443,8 +483,10 @@ console.log('se', selectedOrder);
               <Col span={12}>
                 <Text strong>订单标题：</Text>
                 <div style={{ marginTop: 8, marginBottom: 16 }}>
-                  <Title level={4} style={{ margin: 0 }}>{selectedOrder.title}</Title>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <Title level={4} style={{ margin: 0 }}>
+                    {selectedOrder.title}
+                  </Title>
+                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                     {getTypeTag(selectedOrder.type)}
                     {getPriorityTag(selectedOrder.priority)}
                   </div>
@@ -457,17 +499,103 @@ console.log('se', selectedOrder);
                 </div>
               </Col>
             </Row>
-            
-            <Text strong>项目描述：</Text>
-            <div style={{ marginTop: 8, marginBottom: 16, padding: 12, background: '#f5f5f5', borderRadius: 6 }}>
-              <Text>{selectedOrder.description}</Text>
+
+            {/* 附件：可折叠 + 弹窗查看 */}
+            <div style={{ marginTop: 8 }}>
+              <Collapse bordered={false} defaultActiveKey={["attachments"]}>
+                <Collapse.Panel
+                  header={
+                    <span>
+                      附件{" "}
+                      {attachments?.length ? `(${attachments.length})` : ""}
+                    </span>
+                  }
+                  key="attachments"
+                >
+                  {attLoading ? (
+                    <Text type="secondary">加载中...</Text>
+                  ) : attachments && attachments.length > 0 ? (
+                    <List
+                      dataSource={attachments}
+                      renderItem={(item: any) => (
+                        <List.Item>
+                          <List.Item.Meta
+                            title={
+                              <Typography.Link
+                              style={{color: '#1890ff'}}
+                                onClick={async (e) => {
+                                  e.preventDefault();
+                                  try {
+                                    const resp = await http.get(
+                                      `/materials/${item.id}/preview`,
+                                      { responseType: "blob" }
+                                    );
+                                    const blob = new Blob([resp.data]);
+                                    const filename =
+                                      item.title || `attachment-${item.id}`;
+                                    const nav: any = window.navigator;
+                                    if (
+                                      nav &&
+                                      typeof nav.msSaveOrOpenBlob === "function"
+                                    ) {
+                                      nav.msSaveOrOpenBlob(blob, filename);
+                                      return;
+                                    }
+                                    const url =
+                                      window.URL.createObjectURL(blob);
+                                    const a = document.createElement("a");
+                                    a.href = url;
+                                    a.download = filename;
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    a.remove();
+                                    window.URL.revokeObjectURL(url);
+                                  } catch {
+                                    message.error("下载失败");
+                                  }
+                                }}
+                              >
+                                {item.title || item.url}
+                              </Typography.Link>
+                            }
+                            description={dayjs(item.createdAt).format(
+                              "YYYY-MM-DD HH:mm"
+                            )}
+                          />
+                        </List.Item>
+                      )}
+                      locale={{ emptyText: "暂无附件" }}
+                    />
+                  ) : (
+                    <Text type="secondary">暂无附件</Text>
+                  )}
+                </Collapse.Panel>
+              </Collapse>
             </div>
+
+            {selectedOrder.description && <><Text strong>项目描述：</Text><div
+              style={{
+                marginTop: 8,
+                marginBottom: 16,
+                padding: 12,
+                background: "#f5f5f5",
+                borderRadius: 6,
+              }}
+            >
+              <Text>{selectedOrder.description}</Text>
+            </div></>}
 
             <Row gutter={16}>
               <Col span={8}>
                 <Text strong>项目金额：</Text>
                 <div style={{ marginTop: 8, marginBottom: 16 }}>
-                  <Text style={{ fontSize: 18, color: '#1890ff', fontWeight: 'bold' }}>
+                  <Text
+                    style={{
+                      fontSize: 18,
+                      color: "#1890ff",
+                      fontWeight: "bold",
+                    }}
+                  >
                     ¥{selectedOrder.amount.toFixed(2)}
                   </Text>
                   {selectedOrder.budget && (
@@ -482,9 +610,12 @@ console.log('se', selectedOrder);
               <Col span={8}>
                 <Text strong>广告商信息：</Text>
                 <div style={{ marginTop: 8, marginBottom: 16 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Avatar src={resolveFileUrl(selectedOrder.customer.avatar)} 
-                    icon={<UserOutlined />} 
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 8 }}
+                  >
+                    <Avatar
+                      src={resolveFileUrl(selectedOrder.customer.avatar)}
+                      icon={<UserOutlined />}
                     />
                     <div>
                       <Text strong>{selectedOrder.customer.username}</Text>
@@ -503,7 +634,9 @@ console.log('se', selectedOrder);
                 <Text strong>截止时间：</Text>
                 <div style={{ marginTop: 8, marginBottom: 16 }}>
                   {selectedOrder.deadline ? (
-                    <Text>{dayjs(selectedOrder.deadline).format('YYYY-MM-DD HH:mm')}</Text>
+                    <Text>
+                      {dayjs(selectedOrder.deadline).format("YYYY-MM-DD HH:mm")}
+                    </Text>
                   ) : (
                     <Text type="secondary">无截止时间</Text>
                   )}
@@ -511,27 +644,46 @@ console.log('se', selectedOrder);
               </Col>
             </Row>
 
-            <Text strong>内容要求：</Text>
-            <div style={{ marginTop: 8, marginBottom: 16, padding: 12, background: '#f5f5f5', borderRadius: 6 }}>
-              <Text>{selectedOrder.contentRequirements}</Text>
-            </div>
+            {selectedOrder.contentRequirements && (
+              <div
+                style={{
+                  marginTop: 8,
+                  marginBottom: 16,
+                  padding: 12,
+                  background: "#f5f5f5",
+                  borderRadius: 6,
+                }}
+              >
+                <Text strong>内容要求：</Text>
+                <Text>{selectedOrder.contentRequirements}</Text>
+              </div>
+            )}
 
             {selectedOrder.tags && selectedOrder.tags.length > 0 && (
               <>
                 <Text strong>标签：</Text>
                 <div style={{ marginTop: 8, marginBottom: 16 }}>
                   <Space wrap>
-                    {selectedOrder.tags?.map(tag => (
-                      <Tag key={tag} color="blue">{tag}</Tag>
+                    {selectedOrder.tags?.map((tag) => (
+                      <Tag key={tag} color="blue">
+                        {tag}
+                      </Tag>
                     ))}
                   </Space>
                 </div>
               </>
             )}
 
-            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f0f0f0' }}>
+            <div
+              style={{
+                marginTop: 16,
+                paddingTop: 16,
+                borderTop: "1px solid #f0f0f0",
+              }}
+            >
               <Text type="secondary">
-                发布时间: {dayjs(selectedOrder.createdAt).format('YYYY-MM-DD HH:mm:ss')}
+                发布时间:{" "}
+                {dayjs(selectedOrder.createdAt).format("YYYY-MM-DD HH:mm:ss")}
               </Text>
               <div style={{ marginTop: 8 }}>
                 <Text type="secondary">
@@ -553,15 +705,11 @@ console.log('se', selectedOrder);
         }}
         footer={null}
       >
-        <Form
-          form={applyForm}
-          layout="vertical"
-          onFinish={handleApply}
-        >
+        <Form form={applyForm} layout="vertical" onFinish={handleApply}>
           <Form.Item
             name="message"
             label="申请留言"
-            rules={[{ required: true, message: '请输入申请留言' }]}
+            rules={[{ required: true, message: "请输入申请留言" }]}
           >
             <TextArea
               rows={4}
@@ -574,10 +722,12 @@ console.log('se', selectedOrder);
               <Button type="primary" htmlType="submit">
                 提交申请
               </Button>
-              <Button onClick={() => {
-                setApplyModalVisible(false);
-                applyForm.resetFields();
-              }}>
+              <Button
+                onClick={() => {
+                  setApplyModalVisible(false);
+                  applyForm.resetFields();
+                }}
+              >
                 取消
               </Button>
             </Space>
