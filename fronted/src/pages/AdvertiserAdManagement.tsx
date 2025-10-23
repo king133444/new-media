@@ -8,6 +8,21 @@ import { useLocation, useNavigate } from 'react-router-dom';
 const { TextArea } = Input;
 const { Option } = Select;
 
+// Stable mappings/helpers to avoid changing dependencies in hooks
+const labelMap: Record<string, string> = {
+  VIDEO: '视频',
+  DESIGN: '设计',
+  H5: 'H5',
+  ANIMATION: '动画',
+  AUDIO: '音频',
+  OTHER: '其他',
+};
+
+const codeFromLabel = (label: string): string | undefined => {
+  const e = Object.entries(labelMap).find(([, cn]) => cn === label);
+  return e ? e[0] : undefined;
+};
+
 const AdvertiserAdManagement: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [form] = Form.useForm<any>();
@@ -18,18 +33,22 @@ const AdvertiserAdManagement: React.FC = () => {
   const onFinish = async (values: any) => {
     try {
       setSubmitting(true);
-      const tagsArray: string[] = (values.tagsInput || '')
-        .split(/\s+/)
+      const reqArray: string[] = (values.requirementsInput || '')
+        .split(/；|;/)
         .map((t: string) => t.trim())
         .filter((t: string) => t);
+      const typeCodes: string[] = Array.isArray(values.types) ? values.types : (values.type ? [values.type] : []);
+      const primaryType = typeCodes[0] || 'OTHER';
+      const typeChinese: string[] = typeCodes.map((c) => labelMap[c] || c);
       const payload: CreateOrderPayload = {
         title: values.title,
         description: values.description,
-        type: values.type,
+        type: primaryType as any,
         amount: values.amount,
         priority: values.priority,
         deadline: values.deadline ? (values.deadline as dayjs.Dayjs).toISOString() : undefined,
-        tags: JSON.stringify(tagsArray),
+        requirements: JSON.stringify(typeChinese),
+        tags: JSON.stringify(reqArray),
       } as any;
       const created = await ordersApi.create(payload);
       // 若创建时已选择附件，则在创建成功后立即上传到该订单
@@ -63,14 +82,37 @@ const AdvertiserAdManagement: React.FC = () => {
     const state: any = (location as any).state;
     const prefill = state?.prefill;
     if (!prefill) return;
+    const inferTypes = (prefill: any) => {
+      const codes: string[] = [];
+      if (prefill.type) codes.push(prefill.type);
+      const reqs = prefill.requirements;
+      if (Array.isArray(reqs)) {
+        reqs.forEach((r: string) => {
+          const code = codeFromLabel(r);
+          if (code && !codes.includes(code)) codes.push(code);
+        });
+      } else if (typeof reqs === 'string') {
+        try {
+          const arr = JSON.parse(reqs);
+          if (Array.isArray(arr)) {
+            arr.forEach((r: any) => {
+              const code = codeFromLabel(String(r));
+              if (code && !codes.includes(code)) codes.push(code);
+            });
+          }
+        } catch {}
+      }
+      return codes;
+    };
+
     form.setFieldsValue({
       title: prefill.title,
       description: prefill.description,
-      type: prefill.type,
+      types: inferTypes(prefill),
       amount: prefill.amount,
       priority: prefill.priority,
       deadline: prefill.deadline ? dayjs(prefill.deadline) : undefined,
-      tagsInput: Array.isArray(prefill.tags) ? prefill.tags.join(' ') : (prefill.tags || ''),
+      requirementsInput: Array.isArray(prefill.tags) ? prefill.tags.join('；') : (prefill.tags || ''),
     });
   }, [location, form]);
 
@@ -85,8 +127,8 @@ const AdvertiserAdManagement: React.FC = () => {
           <TextArea rows={3} placeholder="项目背景、目的、参考样例等" />
         </Form.Item>
 
-        <Form.Item name="type" label="订单类型" rules={[{ required: true, message: '请选择订单类型' }]}>
-          <Select placeholder="请选择类型">
+        <Form.Item name="types" label="订单类型（可多选）" rules={[{ required: true, message: '请选择至少一个订单类型' }]}>
+          <Select mode="multiple" placeholder="请选择类型（可多选）">
             <Option value="VIDEO">视频</Option>
             <Option value="DESIGN">设计</Option>
             <Option value="H5">H5</Option>
@@ -114,10 +156,8 @@ const AdvertiserAdManagement: React.FC = () => {
           <DatePicker style={{ width: '100%' }} showTime />
         </Form.Item>
 
-        {/* 项目需求/内容要求已移除 */}
-
-        <Form.Item name="tagsInput" label="标签（以空格分割）">
-          <Input placeholder="示例：剪辑 AE PS 宣传" />
+        <Form.Item name="requirementsInput" label="需求标签（以；分隔）">
+          <Input placeholder="示例：剪辑；AE；宣传视频" />
         </Form.Item>
 
         {/* 预上传附件（创建成功后自动归属到该订单） */}

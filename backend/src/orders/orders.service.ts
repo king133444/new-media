@@ -162,25 +162,26 @@ export class OrdersService {
       }),
       this.prisma.order.count({ where }),
     ]);
-    const ordersWithTagsArray = orders.map((order) => {
-      let tags = [];
-      if (typeof order.tags === "string") {
-        try {
-          tags = JSON.parse(order.tags);
-          if (!Array.isArray(tags)) tags = [];
-        } catch {
-          tags = [];
+    const ordersWithParsed = orders.map((order) => {
+      const parseArr = (val: any) => {
+        if (!val) return [] as string[];
+        if (Array.isArray(val)) return val as string[];
+        if (typeof val === 'string') {
+          try {
+            const arr = JSON.parse(val);
+            return Array.isArray(arr) ? (arr as string[]) : [];
+          } catch {
+            return [] as string[];
+          }
         }
-      } else if (Array.isArray(order.tags)) {
-        tags = order.tags;
-      }
-      return {
-        ...order,
-        tags,
+        return [] as string[];
       };
+      const tags = parseArr((order as any).tags);
+      const requirements = parseArr((order as any).requirements);
+      return { ...order, tags, requirements } as any;
     });
     return {
-      data: ordersWithTagsArray,
+      data: ordersWithParsed,
       total,
       page,
       pageSize,
@@ -260,18 +261,22 @@ export class OrdersService {
         };
       })
     );
-    let tags = [];
-    if (typeof order.tags === "string") {
-      try {
-        tags = JSON.parse(order.tags);
-        if (!Array.isArray(tags)) tags = [];
-      } catch {
-        tags = [];
+    const parseArr = (val: any) => {
+      if (!val) return [] as string[];
+      if (Array.isArray(val)) return val as string[];
+      if (typeof val === 'string') {
+        try {
+          const arr = JSON.parse(val);
+          return Array.isArray(arr) ? (arr as string[]) : [];
+        } catch {
+          return [] as string[];
+        }
       }
-    } else if (Array.isArray(order.tags)) {
-      tags = order.tags;
-    }
-    return { ...order, tags, applications: enhancedApps } as any;
+      return [] as string[];
+    };
+    const tags = parseArr((order as any).tags);
+    const requirements = parseArr((order as any).requirements);
+    return { ...order, tags, requirements, applications: enhancedApps } as any;
   }
 
   // 更新订单（广告商）
@@ -328,7 +333,6 @@ export class OrdersService {
     if (!isOwner) {
       throw new ForbiddenException("无权删除此订单");
     }
-console.log('order.status',order.status);
 
     // 仅允许删除 已取消/已完成 的订单
     if (!(order.status === OrderStatus.CANCELLED || order.status === OrderStatus.COMPLETED)) {

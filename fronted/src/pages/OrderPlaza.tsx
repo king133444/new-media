@@ -661,12 +661,12 @@ const OrderPlaza: React.FC = () => {
 
             {selectedOrder.tags && selectedOrder.tags.length > 0 && (
               <>
-                <Text strong>标签：</Text>
+                <Text strong>需求标签：</Text>
                 <div style={{ marginTop: 8, marginBottom: 16 }}>
                   <Space wrap>
-                    {selectedOrder.tags?.map((tag) => (
-                      <Tag key={tag} color="blue">
-                        {tag}
+                    {selectedOrder.tags?.map((r) => (
+                      <Tag key={r} color="blue">
+                        {r}
                       </Tag>
                     ))}
                   </Space>

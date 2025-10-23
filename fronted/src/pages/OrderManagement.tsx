@@ -69,6 +69,19 @@ const OrderManagement: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const labelMap: Record<string, string> = {
+    VIDEO: '视频',
+    DESIGN: '设计',
+    H5: 'H5',
+    ANIMATION: '动画',
+    AUDIO: '音频',
+    OTHER: '其他',
+  };
+  const codeFromLabel = (label: string): string | undefined => {
+    const e = Object.entries(labelMap).find(([, cn]) => cn === label);
+    return e ? e[0] : undefined;
+  };
+
   const fetchOrders = useCallback(async () => {
     setLoading(true);
     try {
@@ -402,18 +415,41 @@ const OrderManagement: React.FC = () => {
     console.log("order", order);
 
     setEditingOrder(order);
+    const inferTypes = (ord: any) => {
+      const codes: string[] = [];
+      if (ord?.type) codes.push(ord.type);
+      const reqs = (ord as any).requirements;
+      if (Array.isArray(reqs)) {
+        reqs.forEach((r: string) => {
+          const code = codeFromLabel(r);
+          if (code && !codes.includes(code)) codes.push(code);
+        });
+      } else if (typeof reqs === 'string') {
+        try {
+          const arr = JSON.parse(reqs);
+          if (Array.isArray(arr)) {
+            arr.forEach((r: any) => {
+              const code = codeFromLabel(String(r));
+              if (code && !codes.includes(code)) codes.push(code);
+            });
+          }
+        } catch {}
+      }
+      return codes;
+    };
+
     form.setFieldsValue({
       title: order.title,
       customer: order.customer?.username ?? "-",
       designer: order.designer?.username ?? "-",
       amount: order.amount,
-      type: order.type,
+      types: inferTypes(order),
       priority: order.priority,
       deadline: order.deadline ? dayjs(order.deadline) : null,
-      tagsInput: Array.isArray(order.tags)
-        ? (order.tags as any[]).join("；")
-        : typeof order.tags === "string"
-        ? order.tags
+      requirementsInput: Array.isArray((order as any).tags)
+        ? ((order as any).tags as any[]).join("；")
+        : typeof (order as any).tags === "string"
+        ? (order as any).tags
         : "",
     });
     setIsModalVisible(true);
@@ -470,35 +506,43 @@ const OrderManagement: React.FC = () => {
     form.validateFields().then(async (values) => {
       try {
         if (editingOrder) {
-          const tags = (values.tagsInput || "")
+          const reqsIn = (values.requirementsInput || "")
             .split(/；|;/)
             .map((t: string) => t.trim())
             .filter((t: string) => t);
+          const typeCodes: string[] = Array.isArray(values.types) ? values.types : (values.type ? [values.type] : []);
+          const primaryType = typeCodes[0] || 'OTHER';
+          const typeChinese: string[] = typeCodes.map((c: string) => labelMap[c] || c);
           await http.patch(`/orders/${editingOrder.id}`, {
             title: values.title,
             amount: values.amount,
-            type: values.type,
+            type: primaryType,
             priority: values.priority,
             deadline: values.deadline
               ? (values.deadline as any).toISOString()
               : undefined,
-            tags: JSON.stringify(tags),
+            requirements: JSON.stringify(typeChinese),
+            tags: JSON.stringify(reqsIn),
           });
           message.success("订单更新成功");
         } else {
-          const tags = (values.tagsInput || "")
+          const reqsIn = (values.requirementsInput || "")
             .split(/；|;/)
             .map((t: string) => t.trim())
             .filter((t: string) => t);
+          const typeCodes: string[] = Array.isArray(values.types) ? values.types : (values.type ? [values.type] : []);
+          const primaryType = typeCodes[0] || 'OTHER';
+          const typeChinese: string[] = typeCodes.map((c: string) => labelMap[c] || c);
           await http.post("/orders", {
             title: values.title,
             amount: values.amount,
-            type: values.type,
+            type: primaryType,
             priority: values.priority,
             deadline: values.deadline
               ? (values.deadline as any).toISOString()
               : undefined,
-            tags: JSON.stringify(tags),
+            requirements: JSON.stringify(typeChinese),
+            tags: JSON.stringify(reqsIn),
           });
           message.success("订单添加成功");
         }
@@ -667,7 +711,8 @@ const OrderManagement: React.FC = () => {
                       amount: o.amount,
                       priority: o.priority,
                       deadline: o.deadline,
-                      tags: Array.isArray(o.tags) ? o.tags : (typeof o.tags === 'string' ? o.tags : []),
+                      requirements: Array.isArray((o as any).requirements) ? (o as any).requirements : (typeof (o as any).requirements === 'string' ? (o as any).requirements : []),
+                      tags: Array.isArray((o as any).tags) ? (o as any).tags : (typeof (o as any).tags === 'string' ? (o as any).tags : []),
                     } } });
                   }} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     <RedoOutlined /> 再次发布
@@ -862,19 +907,19 @@ const OrderManagement: React.FC = () => {
             )}
 
             {(() => {
-              const tags = Array.isArray(viewOrder.tags)
-                ? viewOrder.tags
-                : typeof viewOrder.tags === "string"
-                ? viewOrder.tags
-                    .split(",")
+              const reqs = Array.isArray((viewOrder as any).requirements)
+                ? (viewOrder as any).requirements
+                : typeof (viewOrder as any).requirements === "string"
+                ? (viewOrder as any).requirements
+                    .split("，|,|；|;")
                     .map((t: string) => t.trim())
                     .filter(Boolean)
                 : [];
-              if (!tags.length) return null;
+              if (!reqs.length) return null;
               return (
-                <Card title="标签">
+                <Card title="需求标签">
                   <Space wrap>
-                    {tags.map((t: string) => (
+                    {reqs.map((t: string) => (
                       <Tag key={t} color="blue">
                         {t}
                       </Tag>
@@ -1082,11 +1127,11 @@ const OrderManagement: React.FC = () => {
           {/* 客户/设计师字段移除，避免前端直接修改归属 */}
 
           <Form.Item
-            name="type"
-            label="订单类型"
-            rules={[{ required: true, message: "请选择订单类型" }]}
+            name="types"
+            label="订单类型（可多选）"
+            rules={[{ required: true, message: "请选择至少一个订单类型" }]}
           >
-            <Select placeholder="请选择订单类型">
+            <Select mode="multiple" placeholder="请选择订单类型（可多选）">
               <Select.Option value="VIDEO">视频</Select.Option>
               <Select.Option value="DESIGN">设计</Select.Option>
               <Select.Option value="H5">H5</Select.Option>
@@ -1131,8 +1176,8 @@ const OrderManagement: React.FC = () => {
             <DatePicker style={{ width: "100%" }} showTime />
           </Form.Item>
 
-          <Form.Item name="tagsInput" label="标签（以；分隔）">
-            <Input placeholder="示例：剪辑；AE；PS" />
+          <Form.Item name="requirementsInput" label="需求标签（以；分隔）">
+            <Input placeholder="示例：剪辑；AE；宣传视频" />
           </Form.Item>
         </Form>
       </Modal>
