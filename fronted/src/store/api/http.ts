@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // 统一定义后端基础地址（包含 /api 前缀）
 // 可通过环境变量 REACT_APP_API_URL 覆盖，例如 http://192.168.1.10:3000/api
-export const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://10.10.218.17:3000/api';
+export const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000/api';
 
 export const http = axios.create({
   baseURL: API_BASE_URL,

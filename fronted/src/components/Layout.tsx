@@ -36,6 +36,7 @@ import { markAsRead, markAllAsRead } from "../store/slices/notificationSlice";
 import { wsEmit } from "../store/websocket";
 import { logout } from "../store/slices/authSlice";
 import { resolveFileUrl } from "../store/api/http";
+import AIAssistant from './AIAssistant';
 
 const { Header, Sider, Content } = AntLayout;
 
@@ -544,6 +545,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         >
           {children}
         </Content>
+        {/* 全局 AI 助理悬浮窗 */}
+        <AIAssistant />
       </AntLayout>
     </AntLayout>
   );
