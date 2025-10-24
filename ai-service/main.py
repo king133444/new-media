@@ -162,8 +162,8 @@ def create_app() -> FastAPI:
     origins = [o.strip() for o in cors_origins.split(",") if o.strip()]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=origins,
-        allow_credentials=True,
+        allow_origins=["*"],
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -300,8 +300,31 @@ def create_app() -> FastAPI:
     async def chat_stream(req: ChatRequest, _: None = Depends(verify_api_key)):
         provider = pick_provider(req.provider)
         _log_llm_request("chat.stream", provider.name, req.model, req.messages)
-        generator = provider.stream_chat(req)
-        return StreamingResponse(generator, media_type="text/event-stream")
+
+        def sse_wrapper():
+            try:
+                inner = provider.stream_chat(req)
+                for chunk in inner:
+                    yield chunk
+            except Exception as e:
+                # 以 OpenAI 兼容的 SSE 返回一条错误提示，避免已开始响应后再抛异常
+                payload = {
+                    "id": f"chatcmpl_{int(time.time()*1000)}",
+                    "object": "chat.completion.chunk",
+                    "created": int(time.time()),
+                    "model": req.model or getattr(provider, "default_model", "unknown"),
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"role": "assistant", "content": f"【错误】{e}"},
+                            "finish_reason": "error",
+                        }
+                    ],
+                }
+                yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                yield "data: [DONE]\n\n"
+
+        return StreamingResponse(sse_wrapper(), media_type="text/event-stream")
 
     # --- Inspire endpoints (domain prompts) ---
     @app.get("/v1/assistant/suggestions", response_model=SuggestionsResponse)
@@ -320,8 +343,30 @@ def create_app() -> FastAPI:
         provider = pick_provider(req.provider)
         messages = build_inspire_messages(req)
         _log_llm_request("inspire.stream", provider.name, req.model, messages)
-        generator = provider.stream_chat(ChatRequest(messages=messages, model=req.model, temperature=req.temperature, max_tokens=req.max_tokens, provider=req.provider))
-        return StreamingResponse(generator, media_type="text/event-stream")
+
+        def sse_wrapper():
+            try:
+                inner = provider.stream_chat(ChatRequest(messages=messages, model=req.model, temperature=req.temperature, max_tokens=req.max_tokens, provider=req.provider))
+                for chunk in inner:
+                    yield chunk
+            except Exception as e:
+                payload = {
+                    "id": f"chatcmpl_{int(time.time()*1000)}",
+                    "object": "chat.completion.chunk",
+                    "created": int(time.time()),
+                    "model": req.model or getattr(provider, "default_model", "unknown"),
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"role": "assistant", "content": f"【错误】{e}"},
+                            "finish_reason": "error",
+                        }
+                    ],
+                }
+                yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                yield "data: [DONE]\n\n"
+
+        return StreamingResponse(sse_wrapper(), media_type="text/event-stream")
 
     return app
 

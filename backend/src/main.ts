@@ -13,7 +13,14 @@ async function bootstrap() {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
-  app.enableCors({ origin: corsOrigins, credentials: true });
+  // app.enableCors({ origin: corsOrigins, credentials: true });
+  app.enableCors({ // 后续上线可加入跨域
+    origin: (origin, callback) => {
+      callback(null, true); // 允许所有域名
+    },
+    credentials: true,
+  });
+  
 
   // 全局验证管道
   app.useGlobalPipes(new ValidationPipe({
