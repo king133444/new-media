@@ -78,12 +78,15 @@ jobs:
 
 
   package-image:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         arch: [ amd64, arm64 ]
+    env:
+      ARCH: ${{ inputs.arch || 'both' }}
+      FORMAT: ${{ inputs.format || 'tar' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -97,22 +100,21 @@ jobs:
       - name: Decide output filename
         id: out
         run: |
-          EXT="${{ inputs.format }}"
-          echo "EXT=$EXT" >> $GITHUB_ENV
-          echo "FILE=ai-service_linux_${{ matrix.arch }}.$EXT" >> $GITHUB_ENV
+          echo "EXT=${{ env.FORMAT }}" >> $GITHUB_ENV
+          echo "FILE=ai-service_linux_${{ matrix.arch }}.${{ env.FORMAT }}" >> $GITHUB_ENV
 
       - name: Build and export image (linux/${{ matrix.arch }})
-        if: inputs.arch == 'both' || inputs.arch == matrix.arch
+        if: env.ARCH == 'both' || env.ARCH == matrix.arch
         run: |
           docker buildx build \
             --platform linux/${{ matrix.arch }} \
             -f ai-service/Dockerfile \
             -t ai-service:${{ matrix.arch }} \
-            --output type=${{ inputs.format }},dest=${{ env.FILE }} \
+            --output type=${{ env.FORMAT }},dest=${{ env.FILE }} \
             ai-service
 
       - name: Upload image artifact (linux/${{ matrix.arch }})
-        if: inputs.arch == 'both' || inputs.arch == matrix.arch
+        if: env.ARCH == 'both' || env.ARCH == matrix.arch
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.FILE }}
