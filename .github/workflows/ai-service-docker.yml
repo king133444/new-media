@@ -29,7 +29,7 @@ on:
         default: tar
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
@@ -113,12 +113,38 @@ jobs:
             --output type=${{ env.FORMAT }},dest=${{ env.FILE }} \
             ai-service
 
+      - name: Verify exported file exists (linux/${{ matrix.arch }})
+        if: env.ARCH == 'both' || env.ARCH == matrix.arch
+        run: |
+          ls -lh "${{ env.FILE }}"
+          test -s "${{ env.FILE }}"
+
       - name: Upload image artifact (linux/${{ matrix.arch }})
         if: env.ARCH == 'both' || env.ARCH == matrix.arch
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.FILE }}
+          name: ai-service-${{ matrix.arch }}-${{ env.FORMAT }}
           path: ${{ env.FILE }}
+
+  release-packages:
+    if: startsWith(github.ref, 'refs/tags/ai-service-v')
+    needs: package-image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ai-service-*
+          merge-multiple: true
+
+      - name: Create GitHub Release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ai-service_*.tar
+            ai-service_*.oci
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # 可选：同时推送到 Docker Hub（设置 DOCKERHUB_USERNAME/DOCKERHUB_TOKEN 机密）
       # - name: Login to Docker Hub
