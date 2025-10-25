@@ -46,6 +46,13 @@ export class OrdersController {
     return this.ordersService.getOrderStats(req.user.userId, req.user.role);
   }
 
+  @Post('smart-match')
+  @ApiOperation({ summary: 'AI 智能匹配订单（创作者/设计师）' })
+  @ApiResponse({ status: 200, description: '获取成功' })
+  smartMatch(@Request() req) {
+    return this.ordersService.smartMatch(req.user.userId, req.user.role);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: '查询订单详情' })
   @ApiResponse({ status: 200, description: '查询成功' })

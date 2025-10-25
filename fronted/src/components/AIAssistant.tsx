@@ -1,13 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Drawer, Input, Space, Tag, Tooltip, Typography, theme, message } from 'antd';
-import { SendOutlined, CloseCircleOutlined, RobotOutlined, RedoOutlined } from '@ant-design/icons';
+import { Button, Drawer, Input, Tag, Tooltip, Typography, theme, message, Avatar } from 'antd';
+import { SendOutlined, CloseCircleOutlined, RedoOutlined, UserOutlined } from '@ant-design/icons';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
+import { resolveFileUrl } from '../store/api/http';
 
 const { Text } = Typography;
 
 // 直接沿用 aiurl 环境变量的协议与端口（本地 http://，线上 https://）
-const AI_SERVICE_URL = (process.env.REACT_APP_AI_SERVICE_URL || 'http://localhost:8001')
+const AI_SERVICE_URL = (process.env.REACT_APP_AI_SERVICE_URL || 'http://localhost:3001')
   .replace(/\/$/, '');
 
 
@@ -39,12 +45,13 @@ async function streamInspire(
   signal?: AbortSignal,
   authToken?: string | null,
 ) {
+  const filtered = messages.filter(m => (m.content || '').trim().length > 0);
   const body = {
     role,
     topic,
     provider: 'qwen',
     model: 'qwen-plus',
-    messages: messages.map(m => ({ role: m.role, content: m.content })),
+    messages: filtered.map(m => ({ role: m.role, content: m.content })),
   };
   const res = await fetch(`${AI_SERVICE_URL}/v1/assistant/inspire/stream`, {
     method: 'POST',
@@ -93,6 +100,10 @@ const AIAssistant: React.FC = () => {
   const [suggests, setSuggests] = useState<string[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const { token } = theme.useToken();
+  const xiaomeiUrl = process.env.PUBLIC_URL ? `${process.env.PUBLIC_URL}/xiaomei.svg` : '/xiaomei.svg';
+  const XiaomeiIcon = (
+    <img src={xiaomeiUrl} alt="小媒" style={{ width: 20, height: 20 }} />
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -106,7 +117,7 @@ const AIAssistant: React.FC = () => {
       message.warning('请输入主题或问题');
       return;
     }
-    const history = [...items];
+    const history = items.filter(m => (m.content || '').trim().length > 0);
     const newItems: ChatItem[] = [...history, { role: 'user', content: input || `围绕主题：${topic} 给出创意建议` }];
     setItems(newItems);
     setInput('');
@@ -157,22 +168,22 @@ const AIAssistant: React.FC = () => {
 
   return (
     <>
-      {/* 悬浮按钮 */}
-      <div style={{ position: 'fixed', right: 20, bottom: 20, zIndex: 1020 }}>
-        <Tooltip title="AI 助理">
-          <Button type="primary" shape="round" size="large" icon={<RobotOutlined />} onClick={() => setOpen(true)}>
-            Chat
-          </Button>
-        </Tooltip>
-      </div>
+      {/* 悬浮按钮（抽屉打开时隐藏） */}
+      {!open && (
+        <div style={{ position: 'fixed', right: 20, bottom: 20, zIndex: 1020 }}>
+          <Tooltip title="小媒">
+            <Button shape="round" size="large" icon={XiaomeiIcon} onClick={() => setOpen(true)} />
+          </Tooltip>
+        </div>
+      )}
 
       {/* 右侧抽屉对话 */}
       <Drawer
-        title={<span><RobotOutlined /> 全局 AI 助理</span>}
+        title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{XiaomeiIcon} 小媒</span>}
         placement="right"
-        width={420}
         onClose={() => setOpen(false)}
         open={open}
+        size='large'
         destroyOnClose={false}
       >
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -188,19 +199,75 @@ const AIAssistant: React.FC = () => {
             )}
             {items.map((m, i) => (
               <div key={i} style={{ marginBottom: 12, display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
-                <div style={{ maxWidth: '85%', whiteSpace: 'pre-wrap', background: m.role === 'user' ? token.colorPrimaryBg : token.colorFillTertiary, padding: '8px 12px', borderRadius: 8 }}>
-                  {m.content}
+                <div style={{ maxWidth: '100%', display: 'flex', alignItems: 'flex-start', gap: 8, flexDirection: m.role === 'user' ? 'row-reverse' : 'row' }}>
+                  <Avatar
+                    src={m.role === 'assistant' ? xiaomeiUrl : resolveFileUrl((user as any)?.avatar)}
+                    icon={<UserOutlined />}
+                    size="large"
+                  />
+                  <div style={{ background: m.role === 'user' ? token.colorPrimaryBg : token.colorFillTertiary, padding: '8px 12px', borderRadius: 8 }}>
+                    {m.role === 'assistant' ? (
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        rehypePlugins={[rehypeKatex]}
+                        components={{
+                          a: ({node, ...props}: any) => <a {...props} target="_blank" rel="noreferrer">{props.children}</a>,
+                          img: ({node, ...props}: any) => {
+                            const { style, height, ...rest } = props as any;
+                            return (
+                              <img
+                                {...rest}
+                                alt={(props as any).alt || ''}
+                                style={{ ...(style || {}), maxWidth: '100%', height: 'auto' }}
+                              />
+                            );
+                          },
+                          code: ({inline, className, children, ...props}: any) => (
+                            <code className={className} {...props} style={{ background: 'rgba(0,0,0,0.06)', padding: inline ? '0 4px' : 8, borderRadius: 4, display: inline ? 'inline' : 'block', overflowX: 'auto' }}>
+                              {children}
+                            </code>
+                          )
+                        }}
+                      >
+                        {m.content}
+                      </ReactMarkdown>
+                    ) : (
+                      <span style={{ whiteSpace: 'pre-wrap' }}>{m.content}</span>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
           </div>
 
-          <Space.Compact style={{ width: '100%' }}>
-            <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="输入问题..." onPressEnter={() => !loading && startStream()} />
-            <Button type="primary" icon={<SendOutlined />} loading={loading} onClick={startStream}>发送</Button>
-            <Button danger icon={<CloseCircleOutlined />} disabled={!loading} onClick={stop}>终止</Button>
-            <Button icon={<RedoOutlined />} onClick={retryLast}>重发</Button>
-          </Space.Compact>
+          <div style={{ width: '100%' }}>
+            <Input.TextArea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="输入问题...（Enter 发送，Shift+Enter 换行）"
+              onKeyDown={(e) => {
+                const ne: any = e.nativeEvent as any;
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  if (ne.isComposing) return; // 输入法组合中不发送
+                  e.preventDefault();
+                  if (!loading) startStream();
+                }
+              }}
+              autoSize={{ minRows: 3, maxRows: 10 }}
+              style={{ resize: 'both' }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+              <Tooltip title="发送">
+                <Button type="primary" icon={<SendOutlined />} loading={loading} onClick={startStream} />
+              </Tooltip>
+              <Tooltip title="中止">
+                <Button danger icon={<CloseCircleOutlined />} disabled={!loading} onClick={stop} />
+              </Tooltip>
+              <Tooltip title="重发">
+                <Button icon={<RedoOutlined />} onClick={retryLast} />
+              </Tooltip>
+            </div>
+          </div>
         </div>
       </Drawer>
     </>

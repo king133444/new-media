@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsNumber, IsEnum, IsOptional, IsDateString, Min } from 'class-validator';
-import { OrderType, Priority } from '@prisma/client';
+import { Priority } from '@prisma/client';
 
 export class CreateOrderDto {
   @ApiProperty({ description: '订单标题', example: '品牌宣传视频制作' })
@@ -12,9 +12,7 @@ export class CreateOrderDto {
   @IsOptional()
   description?: string;
 
-  @ApiProperty({ description: '订单类型', enum: OrderType, example: 'VIDEO' })
-  @IsEnum(OrderType)
-  type: OrderType;
+  // 已移除：type 枚举字段
 
   @ApiProperty({ description: '订单金额', example: 5000 })
   @IsNumber()

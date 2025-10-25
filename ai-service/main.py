@@ -192,7 +192,7 @@ def create_app() -> FastAPI:
             api_key_env="QWEN_API_KEY",
             base_url_env="QWEN_BASE_URL",
             default_model_env="QWEN_MODEL",
-            fallback_model="qwen-plus",
+            fallback_model="qwen-flash",
         ),
         # 本地 Ollama 的 OpenAI 兼容 API：默认 http://localhost:11434/v1
         "ollama": OpenAICompatProvider(

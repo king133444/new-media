@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   Card,
   Button,
-  Table,
   Modal,
   Form,
   Input,
@@ -17,8 +16,9 @@ import {
   Tooltip,
   Empty,
   InputNumber,
+  List,
+  Divider,
 } from "antd";
-import { List } from "antd";
 import { Collapse } from "antd";
 import {
   EyeOutlined,
@@ -28,7 +28,7 @@ import {
   SearchOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
-import type { ColumnsType } from "antd/es/table";
+// import type { ColumnsType } from "antd/es/table";
 import { useSelector } from "react-redux";
 import { RootState } from "../store";
 import http, { resolveFileUrl } from "../store/api/http";
@@ -41,13 +41,13 @@ interface Order {
   id: string;
   title: string;
   description: string;
-  type: string;
   amount: number;
   budget: number;
   status: string;
   priority: string;
   deadline: string;
   contentRequirements: string;
+  requirements: string[];
   tags: string[];
   createdAt: string;
   applications?: Array<{
@@ -67,6 +67,10 @@ interface Order {
 
 const OrderPlaza: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [page, setPage] = useState<number>(1);
+  const [pageSize] = useState<number>(6);
+  const [total, setTotal] = useState<number>(0);
+  const [aiSet, setAiSet] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [viewModalVisible, setViewModalVisible] = useState(false);
@@ -75,7 +79,6 @@ const OrderPlaza: React.FC = () => {
   const [attLoading, setAttLoading] = useState(false);
   const [applyForm] = Form.useForm();
   const [filters, setFilters] = useState({
-    type: "",
     priority: "",
     minAmount: 0,
     maxAmount: undefined as number | undefined,
@@ -89,22 +92,24 @@ const OrderPlaza: React.FC = () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (filters.type) params.append("type", filters.type);
       if (filters.priority) params.append("priority", filters.priority);
       if (filters.minAmount !== undefined)
         params.append("minAmount", filters.minAmount?.toString());
       if (filters.maxAmount !== undefined)
         params.append("maxAmount", filters.maxAmount?.toString());
       if (filters.keyword) params.append("keyword", filters.keyword);
+      params.append("page", String(page));
+      params.append("pageSize", String(pageSize));
 
       const { data } = await http.get(`/orders?${params.toString()}`);
       setOrders(data.data || []);
+      setTotal(Number(data.total || 0));
     } catch (error) {
       message.error("获取订单列表失败");
     } finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, [filters, page, pageSize]);
 
   useEffect(() => {
     fetchOrders();
@@ -150,7 +155,7 @@ const OrderPlaza: React.FC = () => {
   // 获取状态标签
   const getStatusTag = (status: string) => {
     const statusMap: { [key: string]: { color: string; text: string } } = {
-      PENDING: { color: "orange", text: "待接单" },
+      PENDING: { color: "orange", text: "已发布" },
       IN_PROGRESS: { color: "blue", text: "进行中" },
       COMPLETED: { color: "green", text: "已完成" },
       CANCELLED: { color: "red", text: "已取消" },
@@ -160,184 +165,20 @@ const OrderPlaza: React.FC = () => {
   };
 
   // 获取紧急程度标签
-  const getPriorityTag = (priority: string) => {
-    const priorityMap: { [key: string]: { color: string; text: string } } = {
-      LOW: { color: "green", text: "低" },
-      MEDIUM: { color: "blue", text: "中" },
-      HIGH: { color: "orange", text: "高" },
-      URGENT: { color: "red", text: "紧急" },
+  const getPriorityText = (priority: string) => {
+    const map: { [key: string]: string } = {
+      LOW: "低",
+      MEDIUM: "中",
+      HIGH: "高",
+      URGENT: "紧急",
     };
-    const config = priorityMap[priority] || {
-      color: "default",
-      text: priority,
-    };
-    return <Tag color={config.color}>{config.text}</Tag>;
+    const text = map[priority] || priority;
+    return <Text type="secondary">紧急程度：{text}</Text>;
   };
 
-  // 获取类型标签
-  const getTypeTag = (type: string) => {
-    const typeMap: { [key: string]: { color: string; text: string } } = {
-      VIDEO: { color: "purple", text: "视频" },
-      DESIGN: { color: "cyan", text: "设计" },
-      H5: { color: "blue", text: "H5" },
-      ANIMATION: { color: "orange", text: "动画" },
-      AUDIO: { color: "green", text: "音频" },
-      OTHER: { color: "default", text: "其他" },
-    };
-    const config = typeMap[type] || { color: "default", text: type };
-    return <Tag color={config.color}>{config.text}</Tag>;
-  };
+  // 已移除：类型标签
 
-  const columns: ColumnsType<Order> = [
-    {
-      title: "订单信息",
-      key: "orderInfo",
-      width: 300,
-      render: (_, record) => (
-        <div>
-          <Title level={5} style={{ margin: 0, marginBottom: 4 }}>
-            {record.title}
-          </Title>
-          <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
-            {getTypeTag(record.type)}
-            {getPriorityTag(record.priority)}
-          </div>
-          <Text type="secondary" ellipsis={{ tooltip: record.description }}>
-            {record.description}
-          </Text>
-        </div>
-      ),
-    },
-    {
-      title: "金额",
-      dataIndex: "amount",
-      key: "amount",
-      width: 120,
-      render: (amount, record) => (
-        <div>
-          <Text strong style={{ fontSize: 16, color: "#1890ff" }}>
-            ¥{amount.toFixed(2)}
-          </Text>
-          {record.budget && (
-            <div>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                预算: ¥{record.budget.toFixed(2)}
-              </Text>
-            </div>
-          )}
-        </div>
-      ),
-    },
-    {
-      title: "广告商",
-      key: "customer",
-      width: 150,
-      render: (_, record) => (
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <Avatar
-            src={resolveFileUrl(record.customer.avatar)}
-            icon={<UserOutlined />}
-            size="small"
-          />
-          <div>
-            <Text strong>{record.customer.username}</Text>
-            {record.customer.company && (
-              <div>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  {record.customer.company}
-                </Text>
-              </div>
-            )}
-          </div>
-        </div>
-      ),
-    },
-    {
-      title: "状态",
-      dataIndex: "status",
-      key: "status",
-      width: 100,
-      render: (status) => getStatusTag(status),
-    },
-    {
-      title: "截止时间",
-      dataIndex: "deadline",
-      key: "deadline",
-      width: 120,
-      render: (deadline) => (
-        <div>
-          {deadline ? (
-            <>
-              <Text>{dayjs(deadline).format("MM-DD")}</Text>
-              <div>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  {dayjs(deadline).format("HH:mm")}
-                </Text>
-              </div>
-            </>
-          ) : (
-            <Text type="secondary">无截止时间</Text>
-          )}
-        </div>
-      ),
-    },
-    {
-      title: "申请数",
-      dataIndex: ["_count", "applications"],
-      key: "applications",
-      width: 80,
-      render: (count) => <Tag color="blue">{count} 个申请</Tag>,
-    },
-    {
-      title: "发布时间",
-      dataIndex: "createdAt",
-      key: "createdAt",
-      width: 100,
-      render: (date) => (
-        <Text type="secondary" style={{ fontSize: 12 }}>
-          {dayjs(date).format("MM-DD HH:mm")}
-        </Text>
-      ),
-    },
-    {
-      title: "操作",
-      key: "action",
-      width: 120,
-      render: (_, record) => (
-        <Space>
-          <Tooltip title="查看详情">
-            <Button
-              type="text"
-              icon={<EyeOutlined />}
-              onClick={() => viewOrderDetail(record)}
-            />
-          </Tooltip>
-          {record.status === "PENDING" &&
-            (() => {
-              const alreadyApplied = Array.isArray(record.applications)
-                ? !!record.applications?.some((app) => app.userId === user?.id)
-                : false;
-              if (alreadyApplied) {
-                return <Tag color="default">已申请</Tag>;
-              }
-              return (
-                <Button
-                  type="primary"
-                  size="small"
-                  icon={<SendOutlined />}
-                  onClick={() => {
-                    setSelectedOrder(record);
-                    setApplyModalVisible(true);
-                  }}
-                >
-                  申请
-                </Button>
-              );
-            })()}
-        </Space>
-      ),
-    },
-  ];
+  // 已移除表格，改为卡片分页（每页6个）
 
   if (user?.role !== "CREATOR" && user?.role !== "DESIGNER") {
     return <div>您没有权限访问此页面</div>;
@@ -360,24 +201,7 @@ const OrderPlaza: React.FC = () => {
       {/* 筛选器 */}
       <Card style={{ marginBottom: 16 }}>
         <Row gutter={16}>
-          <Col xs={24} sm={12} md={6}>
-            <div style={{ marginBottom: 4 }}>
-              <Text type="secondary">类型</Text>
-            </div>
-            <Select
-              style={{ width: "100%" }}
-              value={filters.type}
-              onChange={(value) => setFilters({ ...filters, type: value })}
-              allowClear
-            >
-              <Option value="VIDEO">视频</Option>
-              <Option value="DESIGN">设计</Option>
-              <Option value="H5">H5</Option>
-              <Option value="ANIMATION">动画</Option>
-              <Option value="AUDIO">音频</Option>
-              <Option value="OTHER">其他</Option>
-            </Select>
-          </Col>
+          {/* 已移除类型筛选 */}
           <Col xs={24} sm={12} md={6}>
             <div style={{ marginBottom: 4 }}>
               <Text type="secondary">紧急程度</Text>
@@ -448,24 +272,152 @@ const OrderPlaza: React.FC = () => {
             </Button>
           </Col>
         </Row>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+          <div style={{ color: '#666' }}>
+            还在为找不到心仪的订单而烦恼吗？试试 <strong>小媒 AI</strong> 筛选功能，可根据您的擅长技能与个性化标签匹配合适订单。
+          </div>
+          <Space>
+            <Button icon={<FilterOutlined />} onClick={() => { setAiSet(new Set()); setPage(1); fetchOrders(); }}>筛选</Button>
+            <Button onClick={() => { setFilters({ priority: "", minAmount: 0, maxAmount: undefined, keyword: "" }); setAiSet(new Set()); setPage(1); fetchOrders(); }}>重置</Button>
+            <Button type="primary" onClick={async () => {
+              try {
+                setLoading(true);
+                const { data } = await http.post('/orders/smart-match');
+                const list = data?.data || [];
+                setOrders(list);
+                setAiSet(new Set(list.map((x: any) => x.id)));
+                message.success(data?.notice || '已为您筛选');
+              } catch (e: any) {
+                message.error(e?.response?.data?.message || 'AI 筛选失败');
+              } finally {
+                setLoading(false);
+              }
+            }}>AI 智能筛选</Button>
+          </Space>
+        </div>
       </Card>
 
-      {/* 订单列表 */}
+      {/* 订单卡片（每页6个） */}
       <Card>
-        <Table
-          columns={columns}
+        <List
+          grid={{ gutter: 16, xs: 1, sm: 2, md: 2, lg: 3, xl: 3, xxl: 3 }}
           dataSource={orders}
           loading={loading}
-          rowKey="id"
           pagination={{
-            total: orders.length,
-            pageSize: 10,
-            showSizeChanger: true,
+            current: page,
+            pageSize,
+            total,
+            showSizeChanger: false,
             showQuickJumper: true,
-            showTotal: (total, range) =>
-              `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
+            showTotal: (t) => `共 ${t} 条`,
+            onChange: (p) => setPage(p),
           }}
           locale={{ emptyText: <Empty description="暂无订单" /> }}
+          renderItem={(record) => (
+            <List.Item key={record.id}>
+              <Card
+                hoverable
+                style={{ position: 'relative' }}
+                actions={[
+                  (
+                    <Tooltip title="查看详情" key={`view-${record.id}`}>
+                      <Button type="text" icon={<EyeOutlined />} onClick={() => viewOrderDetail(record)} >查看</Button>
+                    </Tooltip>
+                  ),
+                  (
+                    record.status === 'PENDING'
+                      ? (() => {
+                          const alreadyApplied = Array.isArray(record.applications)
+                            ? !!record.applications?.some((app) => app.userId === user?.id)
+                            : false;
+                          if (alreadyApplied) return <Tag key={`applied-${record.id}`} color="default">已申请</Tag>;
+                          return (
+                            <Button key={`apply-${record.id}`} type="link" icon={<SendOutlined />} onClick={() => { setSelectedOrder(record); setApplyModalVisible(true); }}>
+                              申请
+                            </Button>
+                          );
+                        })()
+                      : <span key={`noaction-${record.id}`} />
+                  )
+                ]}
+              >
+                {aiSet.has(record.id) && (
+                  <Tag color="magenta" style={{ position: 'absolute', top: 8, left: 8 }}>AI</Tag>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <Title level={5} style={{ margin: 0, lineHeight: 1.2 }}>{record.title}</Title>
+                    <div style={{ marginTop: 4 }}>{getPriorityText(record.priority)}</div>
+                  </div>
+                  <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                    <Text strong style={{ color: '#1890ff', whiteSpace: 'nowrap' }}>¥{record.amount.toFixed(2)}</Text>
+                    <div>{getStatusTag(record.status)}</div>
+                  </div>
+                </div>
+
+                <Divider style={{ margin: '8px 0' }} />
+
+                <div>
+                  <Text type="secondary" style={{ display: 'block' }} ellipsis={{ tooltip: record.description }}>
+                    {record.description}
+                  </Text>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                  <Avatar src={resolveFileUrl(record.customer.avatar)} icon={<UserOutlined />} size="small" />
+                  <div>
+                    <Text strong>{record.customer.username}</Text>
+                    {record.customer.company && (
+                      <div><Text type="secondary" style={{ fontSize: 12 }}>{record.customer.company}</Text></div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 需求标签 */}
+                {record.tags && record.tags.length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    <Text strong>需求标签：</Text>
+                    <Space wrap style={{ marginTop: 4 }}>
+                      {record.tags.map((t) => (
+                        <Tag key={t} color="blue">{t}</Tag>
+                      ))}
+                    </Space>
+                  </div>
+                )}
+
+                {/* 项目需求 */}
+                {record.requirements && record.requirements.length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    <Text strong>项目需求：</Text>
+                    <Space wrap style={{ marginTop: 4 }}>
+                      {record.requirements.map((r) => (
+                        <Tag key={r} color="purple">{r}</Tag>
+                      ))}
+                    </Space>
+                  </div>
+                )}
+                {/* 截止时间说明，不换行 */}
+                <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                <div style={{ marginTop: 8 }}>
+                  {record.deadline ? (
+                    <Text style={{ color: '#ff4d4f', fontSize: 12, whiteSpace: 'nowrap' }}>
+                      截止：{dayjs(record.deadline).format('YYYY-MM-DD HH:mm')}
+                    </Text>
+                  ) : (
+                    <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>截止：无要求</Text>
+                  )}
+                </div>
+
+                {/* <Divider style={{ margin: '8px 0' }} /> */}
+                <div style={{ marginTop: 8 }}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    当前已有 {(record as any)._count?.applications || 0} 个申请
+                  </Text>
+                </div>
+                </div>
+              </Card>
+            </List.Item>
+          )}
         />
       </Card>
 
@@ -487,8 +439,7 @@ const OrderPlaza: React.FC = () => {
                     {selectedOrder.title}
                   </Title>
                   <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                    {getTypeTag(selectedOrder.type)}
-                    {getPriorityTag(selectedOrder.priority)}
+                    {getPriorityText(selectedOrder.priority)}
                   </div>
                 </div>
               </Col>
@@ -634,7 +585,7 @@ const OrderPlaza: React.FC = () => {
                 <Text strong>截止时间：</Text>
                 <div style={{ marginTop: 8, marginBottom: 16 }}>
                   {selectedOrder.deadline ? (
-                    <Text>
+                    <Text style={{ color: "#ff4d4f", fontSize: 12 }}>
                       {dayjs(selectedOrder.deadline).format("YYYY-MM-DD HH:mm")}
                     </Text>
                   ) : (
@@ -644,7 +595,7 @@ const OrderPlaza: React.FC = () => {
               </Col>
             </Row>
 
-            {selectedOrder.contentRequirements && (
+            {selectedOrder.requirements && selectedOrder.requirements.length > 0 && (
               <div
                 style={{
                   marginTop: 8,
@@ -654,8 +605,12 @@ const OrderPlaza: React.FC = () => {
                   borderRadius: 6,
                 }}
               >
-                <Text strong>内容要求：</Text>
-                <Text>{selectedOrder.contentRequirements}</Text>
+                <Text strong>项目需求：</Text>
+                <Space wrap style={{ marginTop: 8 }}>
+                  {selectedOrder.requirements.map((r) => (
+                    <Tag key={r} color="purple">{r}</Tag>
+                  ))}
+                </Space>
               </div>
             )}
 

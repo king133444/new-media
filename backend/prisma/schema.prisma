@@ -46,7 +46,6 @@ model Order {
   id                  String             @id @default(cuid())
   title               String
   description         String?
-  type                OrderType
   amount              Float
   budget              Float?
   status              OrderStatus        @default(PENDING)
@@ -198,14 +197,6 @@ enum UserStatus {
   BANNED
 }
 
-enum OrderType {
-  VIDEO
-  DESIGN
-  H5
-  ANIMATION
-  AUDIO
-  OTHER
-}
 
 enum OrderStatus {
   PENDING

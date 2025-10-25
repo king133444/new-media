@@ -51,11 +51,10 @@ export class StatisticsService {
 
     // 交易类型分布改为“订单类型”分布（按订单类型聚合金额与数量）
     const orderTypeStats = await this.prisma.order.groupBy({
-      by: ['type'],
-      _count: { type: true },
-      _sum: { amount: true },
-    });
-
+         by: ['priority'],
+         _count: { priority: true },
+         _sum: { amount: true },
+       });
     // 计算平均评分
     const avgRating = await this.prisma.review.aggregate({
       _avg: { rating: true },
@@ -84,8 +83,8 @@ export class StatisticsService {
         totalAmount: stat._sum.amount || 0,
       })),
       transactionTypeDistribution: orderTypeStats.map(stat => ({
-        type: stat.type,
-        count: stat._count.type,
+        type: stat.priority,
+        count: stat._count.priority,
         totalAmount: stat._sum.amount || 0,
       })),
     };

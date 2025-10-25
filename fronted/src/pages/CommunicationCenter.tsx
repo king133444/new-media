@@ -642,10 +642,12 @@ const CommunicationCenter: React.FC = () => {
                     <TextArea
                       value={newMessage}
                       onChange={(e) => setNewMessage(e.target.value)}
-                      placeholder="输入消息..."
-                      autoSize={{ minRows: 1, maxRows: 4 }}
-                      onPressEnter={(e) => {
-                        if (!e.shiftKey) {
+                      placeholder="输入消息...（Enter 发送，Shift+Enter 换行）"
+                      autoSize={{ minRows: 2, maxRows: 6 }}
+                      onKeyDown={(e) => {
+                        const ne: any = e.nativeEvent as any;
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          if (ne.isComposing) return; // 输入法组合中不发送
                           e.preventDefault();
                           sendMessage();
                         }

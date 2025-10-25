@@ -1,12 +1,13 @@
 services:
   ai-service:
-    build:
-      context: ./ai-service
-    image: ai-service:latest
+    # build:
+    #   context: ./ai-service
+    # image: ai-service:latest
+    image: ghcr.io/king133444/ai-service
     environment:
       # 可在运行前通过导出/前缀传入，如：PORT=3001 AI_SERVICE_API_KEY=... docker compose up -d
       PORT: ${PORT:-3001}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001,http://localhost:8000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001,http://localhost:8000,http://10.10.218.18:8000}
       AI_SERVICE_API_KEY: ${AI_SERVICE_API_KEY:-}
       PROVIDER: ${PROVIDER:-qwen}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}

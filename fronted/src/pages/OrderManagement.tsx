@@ -42,6 +42,10 @@ const OrderManagement: React.FC = () => {
   const [form] = Form.useForm();
 
   const [orders, setOrders] = useState<any[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState<{
     status?: string;
@@ -70,12 +74,12 @@ const OrderManagement: React.FC = () => {
   const navigate = useNavigate();
 
   const labelMap: Record<string, string> = {
-    VIDEO: '视频',
-    DESIGN: '设计',
-    H5: 'H5',
-    ANIMATION: '动画',
-    AUDIO: '音频',
-    OTHER: '其他',
+    VIDEO: "视频",
+    DESIGN: "设计",
+    H5: "H5",
+    ANIMATION: "动画",
+    AUDIO: "音频",
+    OTHER: "其他",
   };
   const codeFromLabel = (label: string): string | undefined => {
     const e = Object.entries(labelMap).find(([, cn]) => cn === label);
@@ -92,6 +96,8 @@ const OrderManagement: React.FC = () => {
           keyword: filters.keyword,
           // 广告商查看全部
           mine: user?.role === "ADVERTISER" ? false : undefined,
+          page,
+          pageSize,
         },
       });
       let list = data.data || [];
@@ -100,16 +106,21 @@ const OrderManagement: React.FC = () => {
         list = list.filter((o: any) => o.designer?.id === user.id);
       }
       setOrders(list);
+      setTotal(Number(data.total || 0));
+      setTotalPages(Number(data.totalPages || 1));
     } catch (e: any) {
       message.error(e?.response?.data?.message || "获取订单失败");
     } finally {
       setLoading(false);
     }
-  }, [filters, user]);
+  }, [filters, user, page, pageSize]);
 
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
+
+  // 服务端分页，直接渲染当前页
+  const pagedOrders = orders;
 
   // 根据 URL 参数自动打开“申请/委派”抽屉
   useEffect(() => {
@@ -173,24 +184,33 @@ const OrderManagement: React.FC = () => {
                 renderItem={(item: any) => (
                   <List.Item>
                     <List.Item.Meta
-                      avatar={<Avatar src={resolveFileUrl(item.user?.avatar)} />}
+                      avatar={
+                        <Avatar src={resolveFileUrl(item.user?.avatar)} />
+                      }
                       title={
                         <a
                           role="button"
                           onClick={async (e) => {
                             e.preventDefault();
                             try {
-                              const resp = await http.get(`/materials/${item.id}/preview`, { responseType: 'blob' });
+                              const resp = await http.get(
+                                `/materials/${item.id}/preview`,
+                                { responseType: "blob" }
+                              );
                               const blob = new Blob([resp.data]);
-                              const filename = item.title || `material-${item.id}`;
+                              const filename =
+                                item.title || `material-${item.id}`;
                               // IE/Edge Legacy 兼容：使用 msSaveOrOpenBlob
                               const nav: any = window.navigator;
-                              if (nav && typeof nav.msSaveOrOpenBlob === 'function') {
+                              if (
+                                nav &&
+                                typeof nav.msSaveOrOpenBlob === "function"
+                              ) {
                                 nav.msSaveOrOpenBlob(blob, filename);
                                 return;
                               }
                               const url = window.URL.createObjectURL(blob);
-                              const a = document.createElement('a');
+                              const a = document.createElement("a");
                               a.href = url;
                               a.download = filename;
                               document.body.appendChild(a);
@@ -198,7 +218,7 @@ const OrderManagement: React.FC = () => {
                               a.remove();
                               window.URL.revokeObjectURL(url);
                             } catch (err) {
-                              message.error('下载失败');
+                              message.error("下载失败");
                             }
                           }}
                           href="#!"
@@ -234,21 +254,6 @@ const OrderManagement: React.FC = () => {
       );
     }
   }, [orders, viewVisible, viewOrder, location.search, fetchOrders, navigate]);
-
-  // Tag helpers（与广场页风格一致）
-  const getTypeTag = (type: string) => {
-    const typeMap: { [key: string]: { color: string; text: string } } = {
-      VIDEO: { color: "purple", text: "视频" },
-      DESIGN: { color: "cyan", text: "设计" },
-      H5: { color: "blue", text: "H5" },
-      ANIMATION: { color: "orange", text: "动画" },
-      AUDIO: { color: "green", text: "音频" },
-      OTHER: { color: "default", text: "其他" },
-    };
-    const config = typeMap[type] || { color: "default", text: type };
-    return <Tag color={config.color}>{config.text}</Tag>;
-  };
-
   const getPriorityTag = (priority: string) => {
     const priorityMap: { [key: string]: { color: string; text: string } } = {
       LOW: { color: "green", text: "低" },
@@ -260,7 +265,7 @@ const OrderManagement: React.FC = () => {
       color: "default",
       text: priority,
     };
-    return <Tag color={config.color}>{config.text}</Tag>;
+    return <Tag color={config.color}>紧急程度：{config.text}</Tag>;
   };
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -368,13 +373,13 @@ const OrderManagement: React.FC = () => {
             查看
           </Button>
           {user?.role === "ADVERTISER" && record.status === "PENDING" && (
-          <Button
-            type="link"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-          >
-            编辑
-          </Button>
+            <Button
+              type="link"
+              icon={<EditOutlined />}
+              onClick={() => handleEdit(record)}
+            >
+              编辑
+            </Button>
           )}
           {/* 广告商：查看申请并委派 */}
           {user?.role === "ADVERTISER" && record.status === "PENDING" && (
@@ -392,9 +397,9 @@ const OrderManagement: React.FC = () => {
                 icon={<CloseOutlined />}
                 onClick={() => handleCancelOrder(record.id)}
               >
-            取消
-          </Button>
-          )}
+                取消
+              </Button>
+            )}
           {/* 删除：仅已取消可删除（管理员/广告商） */}
           {record.status === "CANCELLED" &&
             (user?.role === "ADMIN" || user?.role === "ADVERTISER") && (
@@ -424,7 +429,7 @@ const OrderManagement: React.FC = () => {
           const code = codeFromLabel(r);
           if (code && !codes.includes(code)) codes.push(code);
         });
-      } else if (typeof reqs === 'string') {
+      } else if (typeof reqs === "string") {
         try {
           const arr = JSON.parse(reqs);
           if (Array.isArray(arr)) {
@@ -463,7 +468,11 @@ const OrderManagement: React.FC = () => {
       setAttachmentsLoading(true);
       const [attRes, devRes] = await Promise.all([
         http.get(`/orders/${order.id}/attachments`).catch(() => ({ data: [] })),
-        order.status !== 'PENDING' ? http.get(`/orders/${order.id}/deliverables`).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
+        order.status !== "PENDING"
+          ? http
+              .get(`/orders/${order.id}/deliverables`)
+              .catch(() => ({ data: [] }))
+          : Promise.resolve({ data: [] }),
       ]);
       setAttachmentsList(attRes.data || []);
       setDeliverablesList(devRes.data || []);
@@ -479,7 +488,7 @@ const OrderManagement: React.FC = () => {
   const handleCancelOrder = async (id: string) => {
     try {
       if (user?.role === "ADVERTISER") {
-      await http.post(`/orders/${id}/cancel`);
+        await http.post(`/orders/${id}/cancel`);
       } else if (user?.role === "CREATOR" || user?.role === "DESIGNER") {
         await http.post(`/orders/${id}/cancel-by-designer`);
       } else {
@@ -510,9 +519,15 @@ const OrderManagement: React.FC = () => {
             .split(/；|;/)
             .map((t: string) => t.trim())
             .filter((t: string) => t);
-          const typeCodes: string[] = Array.isArray(values.types) ? values.types : (values.type ? [values.type] : []);
-          const primaryType = typeCodes[0] || 'OTHER';
-          const typeChinese: string[] = typeCodes.map((c: string) => labelMap[c] || c);
+          const typeCodes: string[] = Array.isArray(values.types)
+            ? values.types
+            : values.type
+            ? [values.type]
+            : [];
+          const primaryType = typeCodes[0] || "OTHER";
+          const typeChinese: string[] = typeCodes.map(
+            (c: string) => labelMap[c] || c
+          );
           await http.patch(`/orders/${editingOrder.id}`, {
             title: values.title,
             amount: values.amount,
@@ -530,9 +545,15 @@ const OrderManagement: React.FC = () => {
             .split(/；|;/)
             .map((t: string) => t.trim())
             .filter((t: string) => t);
-          const typeCodes: string[] = Array.isArray(values.types) ? values.types : (values.type ? [values.type] : []);
-          const primaryType = typeCodes[0] || 'OTHER';
-          const typeChinese: string[] = typeCodes.map((c: string) => labelMap[c] || c);
+          const typeCodes: string[] = Array.isArray(values.types)
+            ? values.types
+            : values.type
+            ? [values.type]
+            : [];
+          const primaryType = typeCodes[0] || "OTHER";
+          const typeChinese: string[] = typeCodes.map(
+            (c: string) => labelMap[c] || c
+          );
           await http.post("/orders", {
             title: values.title,
             amount: values.amount,
@@ -583,8 +604,8 @@ const OrderManagement: React.FC = () => {
       okText: "确认委派",
       cancelText: "取消",
       onOk: async () => {
-    try {
-      await http.post(`/orders/${orderId}/accept/${applicationId}`);
+        try {
+          await http.post(`/orders/${orderId}/accept/${applicationId}`);
           message.success("已委派给该创作者");
           try {
             wsEmit("order.application.read", { applicationId });
@@ -592,12 +613,12 @@ const OrderManagement: React.FC = () => {
           try {
             dispatch(clearApplicationNotificationsByOrderId(orderId));
           } catch {}
-      setAppModalVisible(false);
-      setAppModalOrder(null);
-      fetchOrders();
-    } catch (e: any) {
+          setAppModalVisible(false);
+          setAppModalOrder(null);
+          fetchOrders();
+        } catch (e: any) {
           message.error(e?.response?.data?.message || "委派失败");
-    }
+        }
       },
     });
   };
@@ -683,77 +704,181 @@ const OrderManagement: React.FC = () => {
               gap: 16,
             }}
           >
-            {orders.map((o: any) => {
+            {pagedOrders.map((o: any) => {
               const actions: React.ReactNode[] = [
-                <span key={`view-${o.id}`} onClick={() => handleView(o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span
+                  key={`view-${o.id}`}
+                  onClick={() => handleView(o)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
                   <EyeOutlined /> 查看
                 </span>,
               ];
               if (user?.role === "ADVERTISER" && o.status === "PENDING") {
                 actions.push(
-                  <span key={`edit-${o.id}`} onClick={() => handleEdit(o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span
+                    key={`edit-${o.id}`}
+                    onClick={() => handleEdit(o)}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
                     <EditOutlined /> 编辑
-                  </span>,
+                  </span>
                 );
                 actions.push(
-                  <span key={`assign-${o.id}`} onClick={() => openApplications(o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span
+                    key={`assign-${o.id}`}
+                    onClick={() => openApplications(o)}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
                     <UserAddOutlined /> 申请/委派
-                  </span>,
+                  </span>
                 );
               }
               if (user?.role === "ADVERTISER" && o.status === "CANCELLED") {
                 actions.push(
-                  <span key={`repost-${o.id}`} onClick={() => {
-                    navigate('/advertiser/ads', { state: { prefill: {
-                      title: o.title,
-                      description: o.description,
-                      type: o.type,
-                      amount: o.amount,
-                      priority: o.priority,
-                      deadline: o.deadline,
-                      requirements: Array.isArray((o as any).requirements) ? (o as any).requirements : (typeof (o as any).requirements === 'string' ? (o as any).requirements : []),
-                      tags: Array.isArray((o as any).tags) ? (o as any).tags : (typeof (o as any).tags === 'string' ? (o as any).tags : []),
-                    } } });
-                  }} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span
+                    key={`repost-${o.id}`}
+                    onClick={() => {
+                      navigate("/advertiser/ads", {
+                        state: {
+                          prefill: {
+                            title: o.title,
+                            description: o.description,
+                            type: o.type,
+                            amount: o.amount,
+                            priority: o.priority,
+                            deadline: o.deadline,
+                            requirements: Array.isArray((o as any).requirements)
+                              ? (o as any).requirements
+                              : typeof (o as any).requirements === "string"
+                              ? (o as any).requirements
+                              : [],
+                            tags: Array.isArray((o as any).tags)
+                              ? (o as any).tags
+                              : typeof (o as any).tags === "string"
+                              ? (o as any).tags
+                              : [],
+                          },
+                        },
+                      });
+                    }}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
                     <RedoOutlined /> 再次发布
-                  </span>,
+                  </span>
                 );
               }
-              if (user?.role !== "ADMIN" && o.status !== "CANCELLED" && o.status !== "COMPLETED") {
+              if (
+                user?.role !== "ADMIN" &&
+                o.status !== "CANCELLED" &&
+                o.status !== "COMPLETED"
+              ) {
                 actions.push(
-                  <span key={`cancel-${o.id}`} onClick={() => handleCancelOrder(o.id)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#ff4d4f' }}>
+                  <span
+                    key={`cancel-${o.id}`}
+                    onClick={() => handleCancelOrder(o.id)}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      color: "#ff4d4f",
+                    }}
+                  >
                     <CloseOutlined /> 取消
-                  </span>,
+                  </span>
                 );
               }
-              if ((o.status === "CANCELLED" || o.status === "COMPLETED") && (user?.role === "ADVERTISER" || user?.role === "CREATOR" || user?.role === "DESIGNER")) {
+              if (
+                (o.status === "CANCELLED" || o.status === "COMPLETED") &&
+                (user?.role === "ADVERTISER" ||
+                  user?.role === "CREATOR" ||
+                  user?.role === "DESIGNER")
+              ) {
                 actions.push(
-                  <span key={`delete-${o.id}`} onClick={() => handleDeleteOrder(o.id)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#ff4d4f' }}>
+                  <span
+                    key={`delete-${o.id}`}
+                    onClick={() => handleDeleteOrder(o.id)}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      color: "#ff4d4f",
+                    }}
+                  >
                     <DeleteOutlined /> 删除
-                  </span>,
+                  </span>
                 );
               }
               return (
                 <Card key={o.id} hoverable actions={actions}>
                   {/* Title */}
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ fontSize: 16, fontWeight: 600 }}>{o.title}</div>
-                    <Tag color={
-                      o.status === "PENDING" ? "orange" :
-                      o.status === "IN_PROGRESS" ? "blue" :
-                      o.status === "COMPLETED" ? "green" : "red"
-                    }>
-                      {o.status === "PENDING" ? "已发布" : o.status === "IN_PROGRESS" ? "进行中" : o.status === "COMPLETED" ? "已完成" : "已取消"}
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <div style={{ fontSize: 16, fontWeight: 600 }}>
+                      {o.title}
+                    </div>
+                    <Tag
+                      color={
+                        o.status === "PENDING"
+                          ? "orange"
+                          : o.status === "IN_PROGRESS"
+                          ? "blue"
+                          : o.status === "COMPLETED"
+                          ? "green"
+                          : "red"
+                      }
+                    >
+                      {o.status === "PENDING"
+                        ? "已发布"
+                        : o.status === "IN_PROGRESS"
+                        ? "进行中"
+                        : o.status === "COMPLETED"
+                        ? "已完成"
+                        : "已取消"}
                     </Tag>
                   </div>
                   <Divider style={{ margin: "12px 0" }} />
                   {/* Content */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", rowGap: 8, columnGap: 16, color: "#666" }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      rowGap: 8,
+                      columnGap: 16,
+                      color: "#666",
+                    }}
+                  >
                     <div>客户：{o.customer?.username || "-"}</div>
                     <div>设计师：{o.designer?.username || "-"}</div>
                     <div>类型：{o.type}</div>
                     <div>金额：¥{Number(o.amount || 0).toFixed(2)}</div>
-                    <div>截止：{o.deadline ? dayjs(o.deadline).format("MM-DD HH:mm") : "-"}</div>
+                    <div>
+                      截止：
+                      {o.deadline
+                        ? dayjs(o.deadline).format("MM-DD HH:mm")
+                        : "-"}
+                    </div>
                     <div>申请数：{o._count?.applications ?? 0}</div>
                   </div>
                 </Card>
@@ -763,11 +888,36 @@ const OrderManagement: React.FC = () => {
         )}
       </div>
 
+      {/* 分页器 */}
+      {total > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+          <Space>
+            <span style={{ color: '#999' }}>共 {total} 条</span>
+            <Select size="small" value={pageSize} onChange={(v) => { setPageSize(v); setPage(1); }} style={{ width: 100 }}>
+              <Select.Option value={6}>每页 6 条</Select.Option>
+              <Select.Option value={10}>每页 10 条</Select.Option>
+              <Select.Option value={20}>每页 20 条</Select.Option>
+            </Select>
+            <Space>
+              <Button size="small" disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>上一页</Button>
+              <span style={{ minWidth: 80, textAlign: 'center' }}>第 {page} / {Math.max(1, totalPages)} 页</span>
+              <Button size="small" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>下一页</Button>
+            </Space>
+          </Space>
+        </div>
+      )}
+
       {/* 查看详情 - 卡片化布局 */}
       <Drawer
         title={viewOrder ? `订单详情：${viewOrder.title}` : "订单详情"}
         open={viewVisible}
-        onClose={() => { setViewVisible(false); setAttActive([]); setDevActive([]); setAttachmentsList([]); setDeliverablesList([]); }}
+        onClose={() => {
+          setViewVisible(false);
+          setAttActive([]);
+          setDevActive([]);
+          setAttachmentsList([]);
+          setDeliverablesList([]);
+        }}
         width={720}
       >
         {viewOrder && (
@@ -792,7 +942,6 @@ const OrderManagement: React.FC = () => {
                       flexWrap: "wrap",
                     }}
                   >
-                    {getTypeTag(viewOrder.type)}
                     {getPriorityTag(viewOrder.priority)}
                     <Tag color="blue">
                       金额 ¥{Number(viewOrder.amount || 0).toFixed(2)}
@@ -809,10 +958,17 @@ const OrderManagement: React.FC = () => {
                           : "red"
                       }
                     >
-                      {viewOrder.status}
+                      {viewOrder.status === "PENDING"
+                        ? "已发布"
+                        : viewOrder.status === "IN_PROGRESS"
+                        ? "进行中"
+                        : viewOrder.status === "COMPLETED"
+                        ? "已完成"
+                        : "已取消"}
                     </Tag>
                     {viewOrder.deadline && (
                       <Tag>
+                        截止时间：
                         {dayjs(viewOrder.deadline).format("MM-DD HH:mm")}
                       </Tag>
                     )}
@@ -851,12 +1007,17 @@ const OrderManagement: React.FC = () => {
                             const form = new FormData();
                             deliverFiles.forEach((f: any) => {
                               const raw = f.originFileObj || f;
-                              if (raw) form.append('files', raw as Blob, f.name);
+                              if (raw)
+                                form.append("files", raw as Blob, f.name);
                             });
                             await http.post(
                               `/materials/upload?orderId=${viewOrder.id}`,
                               form,
-                              { headers: { 'Content-Type': 'multipart/form-data' } }
+                              {
+                                headers: {
+                                  "Content-Type": "multipart/form-data",
+                                },
+                              }
                             );
                             message.success("交付物已上传");
                             setDeliverFiles([]);
@@ -885,13 +1046,17 @@ const OrderManagement: React.FC = () => {
                     <div>{viewOrder.customer?.username || "-"}</div>
                   </div>
                 </div>
-                {viewOrder.designer && <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <Avatar src={resolveFileUrl(viewOrder.designer?.avatar)} />
-                  <div>
-                    <div style={{ fontWeight: 600 }}>设计师</div>
-                    <div>{viewOrder.designer?.username || "-"}</div>
+                {viewOrder.designer && (
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 8 }}
+                  >
+                    <Avatar src={resolveFileUrl(viewOrder.designer?.avatar)} />
+                    <div>
+                      <div style={{ fontWeight: 600 }}>设计师</div>
+                      <div>{viewOrder.designer?.username || "-"}</div>
+                    </div>
                   </div>
-                </div>}
+                )}
               </Space>
             </Card>
 
@@ -932,50 +1097,85 @@ const OrderManagement: React.FC = () => {
             {/* 附件（广告商在发布前/后均可上传；双方可见） */}
             <Card
               title="附件"
-              extra={user?.role === 'ADVERTISER' && (
-                <Space>
-                  <Upload multiple fileList={attachFiles} beforeUpload={() => false} onChange={({ fileList }) => setAttachFiles(fileList)}>
-                    <Button size="small">添加附件</Button>
-                  </Upload>
-                  <Button
-                    size="small"
-                    type="primary"
-                    loading={submittingAttach}
-                    disabled={!attachFiles.length}
-                    onClick={async () => {
-                      if (!viewOrder) return;
-                      setSubmittingAttach(true);
-                      try {
-                        const formData = new FormData();
-                        (attachFiles || []).forEach((f: any) => { if (f.originFileObj) formData.append('files', f.originFileObj); });
-                        await http.post(`/materials/upload`, formData, {
-                          params: { orderId: viewOrder.id, kind: 'ATTACHMENT' },
-                          headers: { 'Content-Type': 'multipart/form-data' },
-                        });
-                        message.success('附件已上传');
-                        setAttachFiles([]);
-                        // 刷新列表
+              extra={
+                user?.role === "ADVERTISER" && (
+                  <Space>
+                    <Upload
+                      multiple
+                      fileList={attachFiles}
+                      beforeUpload={() => false}
+                      onChange={({ fileList }) => setAttachFiles(fileList)}
+                    >
+                      <Button size="small">添加附件</Button>
+                    </Upload>
+                    <Button
+                      size="small"
+                      type="primary"
+                      loading={submittingAttach}
+                      disabled={!attachFiles.length}
+                      onClick={async () => {
+                        if (!viewOrder) return;
+                        setSubmittingAttach(true);
                         try {
-                          setAttachmentsLoading(true);
-                          const { data } = await http.get(`/orders/${viewOrder.id}/attachments`);
-                          setAttachmentsList(data || []);
-                        } finally { setAttachmentsLoading(false); }
-                      } catch (e: any) {
-                        message.error(e?.response?.data?.message || '上传失败');
-                      } finally {
-                        setSubmittingAttach(false);
-                      }
-                    }}
-                  >提交</Button>
-                </Space>
-              )}
+                          const formData = new FormData();
+                          (attachFiles || []).forEach((f: any) => {
+                            if (f.originFileObj)
+                              formData.append("files", f.originFileObj);
+                          });
+                          await http.post(`/materials/upload`, formData, {
+                            params: {
+                              orderId: viewOrder.id,
+                              kind: "ATTACHMENT",
+                            },
+                            headers: { "Content-Type": "multipart/form-data" },
+                          });
+                          message.success("附件已上传");
+                          setAttachFiles([]);
+                          // 刷新列表
+                          try {
+                            setAttachmentsLoading(true);
+                            const { data } = await http.get(
+                              `/orders/${viewOrder.id}/attachments`
+                            );
+                            setAttachmentsList(data || []);
+                          } finally {
+                            setAttachmentsLoading(false);
+                          }
+                        } catch (e: any) {
+                          message.error(
+                            e?.response?.data?.message || "上传失败"
+                          );
+                        } finally {
+                          setSubmittingAttach(false);
+                        }
+                      }}
+                    >
+                      提交
+                    </Button>
+                  </Space>
+                )
+              }
             >
               <Collapse
                 bordered={false}
                 activeKey={attActive}
-                onChange={(keys) => setAttActive(Array.isArray(keys) ? keys as string[] : [keys as string])}
+                onChange={(keys) =>
+                  setAttActive(
+                    Array.isArray(keys) ? (keys as string[]) : [keys as string]
+                  )
+                }
               >
-                <Collapse.Panel header={<span>附件列表 {attachmentsList?.length ? `(${attachmentsList.length})` : ''}</span>} key="att">
+                <Collapse.Panel
+                  header={
+                    <span>
+                      附件列表{" "}
+                      {attachmentsList?.length
+                        ? `(${attachmentsList.length})`
+                        : ""}
+                    </span>
+                  }
+                  key="att"
+                >
                   {attachmentsLoading ? (
                     <div>加载中...</div>
                   ) : (
@@ -984,28 +1184,55 @@ const OrderManagement: React.FC = () => {
                       renderItem={(item: any) => (
                         <List.Item>
                           <List.Item.Meta
-                            avatar={<Avatar src={resolveFileUrl(item.user?.avatar)} />}
-                            title={
-                              <a role="button" onClick={async (e) => {
-                                e.preventDefault();
-                                try {
-                                  const resp = await http.get(`/materials/${item.id}/preview`, { responseType: 'blob' });
-                                  const blob = new Blob([resp.data]);
-                                  const filename = item.title || `attachment-${item.id}`;
-                                  const nav: any = window.navigator;
-                                  if (nav && typeof nav.msSaveOrOpenBlob === 'function') { nav.msSaveOrOpenBlob(blob, filename); return; }
-                                  const url = window.URL.createObjectURL(blob);
-                                  const a = document.createElement('a');
-                                  a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
-                                  window.URL.revokeObjectURL(url);
-                                } catch { message.error('下载失败'); }
-                              }} href="#!">{item.title || item.url}</a>
+                            avatar={
+                              <Avatar src={resolveFileUrl(item.user?.avatar)} />
                             }
-                            description={dayjs(item.createdAt).format('YYYY-MM-DD HH:mm')}
+                            title={
+                              <a
+                                role="button"
+                                onClick={async (e) => {
+                                  e.preventDefault();
+                                  try {
+                                    const resp = await http.get(
+                                      `/materials/${item.id}/preview`,
+                                      { responseType: "blob" }
+                                    );
+                                    const blob = new Blob([resp.data]);
+                                    const filename =
+                                      item.title || `attachment-${item.id}`;
+                                    const nav: any = window.navigator;
+                                    if (
+                                      nav &&
+                                      typeof nav.msSaveOrOpenBlob === "function"
+                                    ) {
+                                      nav.msSaveOrOpenBlob(blob, filename);
+                                      return;
+                                    }
+                                    const url =
+                                      window.URL.createObjectURL(blob);
+                                    const a = document.createElement("a");
+                                    a.href = url;
+                                    a.download = filename;
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    a.remove();
+                                    window.URL.revokeObjectURL(url);
+                                  } catch {
+                                    message.error("下载失败");
+                                  }
+                                }}
+                                href="#!"
+                              >
+                                {item.title || item.url}
+                              </a>
+                            }
+                            description={dayjs(item.createdAt).format(
+                              "YYYY-MM-DD HH:mm"
+                            )}
                           />
                         </List.Item>
                       )}
-                      locale={{ emptyText: '暂无附件' }}
+                      locale={{ emptyText: "暂无附件" }}
                     />
                   )}
                 </Collapse.Panel>
@@ -1013,96 +1240,183 @@ const OrderManagement: React.FC = () => {
             </Card>
 
             {/* 交付物列表与确认收货（仅委派后显示） */}
-            {(viewOrder.status !== 'PENDING') && (
-            <Card
-              title="交付物"
-              extra={(user?.role !== 'ADVERTISER' && viewOrder.designer?.id === user?.id) && (
-                <Space>
-                  <Upload multiple fileList={deliverFiles} beforeUpload={() => false} onChange={({ fileList }) => setDeliverFiles(fileList)}>
-                    <Button size="small">添加交付物</Button>
-                  </Upload>
-                  <Button
-                    size="small"
-                    type="primary"
-                    loading={submittingDeliver}
-                    disabled={!deliverFiles.length}
-                    onClick={async () => {
-                      if (!viewOrder) return;
-                      setSubmittingDeliver(true);
-                      try {
-                        const form = new FormData();
-                        deliverFiles.forEach((f: any) => { const raw = f.originFileObj || f; if (raw) form.append('files', raw as Blob, f.name); });
-                        await http.post(`/materials/upload?orderId=${viewOrder.id}`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
-                        message.success('交付物已上传');
-                        setDeliverFiles([]);
-                        // 刷新列表
-                        try {
-                          setDeliverablesLoading(true);
-                          const { data } = await http.get(`/orders/${viewOrder.id}/deliverables`);
-                          setDeliverablesList(data || []);
-                        } finally { setDeliverablesLoading(false); }
-                      } catch (e: any) { message.error(e?.response?.data?.message || '上传失败'); } finally { setSubmittingDeliver(false); }
-                    }}
-                  >提交</Button>
-                </Space>
-              )}
-            >
-              <Collapse
-                bordered={false}
-                activeKey={devActive}
-                onChange={(keys) => setDevActive(Array.isArray(keys) ? keys as string[] : [keys as string])}
-              >
-                <Collapse.Panel header={<span>交付物列表 {deliverablesList?.length ? `(${deliverablesList.length})` : ''}</span>} key="dev">
-                  {deliverablesLoading ? (
-                    <div>加载中...</div>
-                  ) : (
-                    <List
-                      dataSource={deliverablesList}
-                      renderItem={(item: any) => (
-                        <List.Item>
-                          <List.Item.Meta
-                            avatar={<Avatar src={resolveFileUrl(item.user?.avatar)} />}
-                            title={
-                              <a role="button" onClick={async (e) => {
-                                e.preventDefault();
-                                try {
-                                  const resp = await http.get(`/materials/${item.id}/preview`, { responseType: 'blob' });
-                                  const blob = new Blob([resp.data]);
-                                  const filename = item.title || `material-${item.id}`;
-                                  const nav: any = window.navigator;
-                                  if (nav && typeof nav.msSaveOrOpenBlob === 'function') { nav.msSaveOrOpenBlob(blob, filename); return; }
-                                  const url = window.URL.createObjectURL(blob);
-                                  const a = document.createElement('a');
-                                  a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
-                                  window.URL.revokeObjectURL(url);
-                                } catch { message.error('下载失败'); }
-                              }} href="#!">{item.title || item.url}</a>
+            {viewOrder.status !== "PENDING" && (
+              <Card
+                title="交付物"
+                extra={
+                  user?.role !== "ADVERTISER" &&
+                  viewOrder.designer?.id === user?.id && (
+                    <Space>
+                      <Upload
+                        multiple
+                        fileList={deliverFiles}
+                        beforeUpload={() => false}
+                        onChange={({ fileList }) => setDeliverFiles(fileList)}
+                      >
+                        <Button size="small">添加交付物</Button>
+                      </Upload>
+                      <Button
+                        size="small"
+                        type="primary"
+                        loading={submittingDeliver}
+                        disabled={!deliverFiles.length}
+                        onClick={async () => {
+                          if (!viewOrder) return;
+                          setSubmittingDeliver(true);
+                          try {
+                            const form = new FormData();
+                            deliverFiles.forEach((f: any) => {
+                              const raw = f.originFileObj || f;
+                              if (raw)
+                                form.append("files", raw as Blob, f.name);
+                            });
+                            await http.post(
+                              `/materials/upload?orderId=${viewOrder.id}`,
+                              form,
+                              {
+                                headers: {
+                                  "Content-Type": "multipart/form-data",
+                                },
+                              }
+                            );
+                            message.success("交付物已上传");
+                            setDeliverFiles([]);
+                            // 刷新列表
+                            try {
+                              setDeliverablesLoading(true);
+                              const { data } = await http.get(
+                                `/orders/${viewOrder.id}/deliverables`
+                              );
+                              setDeliverablesList(data || []);
+                            } finally {
+                              setDeliverablesLoading(false);
                             }
-                            description={dayjs(item.createdAt).format('YYYY-MM-DD HH:mm')}
-                          />
-                        </List.Item>
-                      )}
-                      locale={{ emptyText: '暂无交付物' }}
-                    />
-                  )}
-                </Collapse.Panel>
-              </Collapse>
+                          } catch (e: any) {
+                            message.error(
+                              e?.response?.data?.message || "上传失败"
+                            );
+                          } finally {
+                            setSubmittingDeliver(false);
+                          }
+                        }}
+                      >
+                        提交
+                      </Button>
+                    </Space>
+                  )
+                }
+              >
+                <Collapse
+                  bordered={false}
+                  activeKey={devActive}
+                  onChange={(keys) =>
+                    setDevActive(
+                      Array.isArray(keys)
+                        ? (keys as string[])
+                        : [keys as string]
+                    )
+                  }
+                >
+                  <Collapse.Panel
+                    header={
+                      <span>
+                        交付物列表{" "}
+                        {deliverablesList?.length
+                          ? `(${deliverablesList.length})`
+                          : ""}
+                      </span>
+                    }
+                    key="dev"
+                  >
+                    {deliverablesLoading ? (
+                      <div>加载中...</div>
+                    ) : (
+                      <List
+                        dataSource={deliverablesList}
+                        renderItem={(item: any) => (
+                          <List.Item>
+                            <List.Item.Meta
+                              avatar={
+                                <Avatar
+                                  src={resolveFileUrl(item.user?.avatar)}
+                                />
+                              }
+                              title={
+                                <a
+                                  role="button"
+                                  onClick={async (e) => {
+                                    e.preventDefault();
+                                    try {
+                                      const resp = await http.get(
+                                        `/materials/${item.id}/preview`,
+                                        { responseType: "blob" }
+                                      );
+                                      const blob = new Blob([resp.data]);
+                                      const filename =
+                                        item.title || `material-${item.id}`;
+                                      const nav: any = window.navigator;
+                                      if (
+                                        nav &&
+                                        typeof nav.msSaveOrOpenBlob ===
+                                          "function"
+                                      ) {
+                                        nav.msSaveOrOpenBlob(blob, filename);
+                                        return;
+                                      }
+                                      const url =
+                                        window.URL.createObjectURL(blob);
+                                      const a = document.createElement("a");
+                                      a.href = url;
+                                      a.download = filename;
+                                      document.body.appendChild(a);
+                                      a.click();
+                                      a.remove();
+                                      window.URL.revokeObjectURL(url);
+                                    } catch {
+                                      message.error("下载失败");
+                                    }
+                                  }}
+                                  href="#!"
+                                >
+                                  {item.title || item.url}
+                                </a>
+                              }
+                              description={dayjs(item.createdAt).format(
+                                "YYYY-MM-DD HH:mm"
+                              )}
+                            />
+                          </List.Item>
+                        )}
+                        locale={{ emptyText: "暂无交付物" }}
+                      />
+                    )}
+                  </Collapse.Panel>
+                </Collapse>
 
-              {user?.role === "ADVERTISER" && viewOrder.status === "IN_PROGRESS" && (
-                <Button
-                  type="primary"
-                  style={{ marginTop: 12 }}
-                  onClick={async () => {
-                    try {
-                      await http.post(`/orders/${viewOrder.id}/confirm-receipt`);
-                      message.success("已确认收货并放款");
-                      setViewVisible(false);
-                      fetchOrders();
-                    } catch (e: any) { message.error(e?.response?.data?.message || "操作失败"); }
-                  }}
-                >确认收货并放款</Button>
-              )}
-            </Card>
+                {user?.role === "ADVERTISER" &&
+                  viewOrder.status === "IN_PROGRESS" && (
+                    <Button
+                      type="primary"
+                      style={{ marginTop: 12 }}
+                      onClick={async () => {
+                        try {
+                          await http.post(
+                            `/orders/${viewOrder.id}/confirm-receipt`
+                          );
+                          message.success("已确认收货并放款");
+                          setViewVisible(false);
+                          fetchOrders();
+                        } catch (e: any) {
+                          message.error(
+                            e?.response?.data?.message || "操作失败"
+                          );
+                        }
+                      }}
+                    >
+                      确认收货并放款
+                    </Button>
+                  )}
+              </Card>
             )}
           </Space>
         )}
@@ -1244,20 +1558,46 @@ const OrderManagement: React.FC = () => {
                     const skills = (() => {
                       const s = app.user?.skills;
                       if (!s) return [] as string[];
-                      try { const arr = typeof s === 'string' ? JSON.parse(s) : s; return Array.isArray(arr) ? arr : []; } catch { return []; }
+                      try {
+                        const arr = typeof s === "string" ? JSON.parse(s) : s;
+                        return Array.isArray(arr) ? arr : [];
+                      } catch {
+                        return [];
+                      }
                     })();
                     const tags = (() => {
                       const s = app.user?.tags;
                       if (!s) return [] as string[];
-                      try { const arr = typeof s === 'string' ? JSON.parse(s) : s; return Array.isArray(arr) ? arr : []; } catch { return []; }
+                      try {
+                        const arr = typeof s === "string" ? JSON.parse(s) : s;
+                        return Array.isArray(arr) ? arr : [];
+                      } catch {
+                        return [];
+                      }
                     })();
                     return (
                       <div>
-                        {app.user?.bio && <div style={{ marginBottom: 4 }}>{app.user.bio}</div>}
+                        {app.user?.bio && (
+                          <div style={{ marginBottom: 4 }}>{app.user.bio}</div>
+                        )}
                         {(skills.length > 0 || tags.length > 0) && (
-                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                            {skills.map((s: string) => (<Tag key={`skill-${s}`} color="green">{s}</Tag>))}
-                            {tags.map((t: string) => (<Tag key={`tag-${t}`} color="blue">{t}</Tag>))}
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: 8,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            {skills.map((s: string) => (
+                              <Tag key={`skill-${s}`} color="green">
+                                {s}
+                              </Tag>
+                            ))}
+                            {tags.map((t: string) => (
+                              <Tag key={`tag-${t}`} color="blue">
+                                {t}
+                              </Tag>
+                            ))}
                           </div>
                         )}
                       </div>

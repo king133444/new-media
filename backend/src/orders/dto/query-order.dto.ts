@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsOptional, IsEnum, IsString, IsInt, Min, IsNumber, IsBoolean } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { OrderType, OrderStatus, Priority } from '@prisma/client';
+import { OrderStatus, Priority } from '@prisma/client';
 
 export class QueryOrderDto {
   @ApiProperty({ description: '页码', example: 1, required: false })
@@ -18,10 +18,7 @@ export class QueryOrderDto {
   @IsOptional()
   pageSize?: number = 10;
 
-  @ApiProperty({ description: '订单类型', enum: OrderType, required: false })
-  @IsEnum(OrderType)
-  @IsOptional()
-  type?: OrderType;
+  // 已移除：type 过滤字段
 
   @ApiProperty({ description: '订单状态', enum: OrderStatus, required: false })
   @IsEnum(OrderStatus)

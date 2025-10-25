@@ -11,6 +11,8 @@ import { UpdateOrderDto } from "./dto/update-order.dto";
 import { QueryOrderDto } from "./dto/query-order.dto";
 import { ApplyOrderDto } from "./dto/apply-order.dto";
 import { OrderStatus, ApplicationStatus } from "@prisma/client";
+import * as crypto from "crypto";
+import fetch from "node-fetch";
 
 @Injectable()
 export class OrdersService {
@@ -75,7 +77,6 @@ export class OrdersService {
     const {
       page = 1,
       pageSize = 10,
-      type,
       status,
       priority,
       keyword,
@@ -100,7 +101,6 @@ export class OrdersService {
       where.OR = [{ designerId: null }, { designerId: userId }];
     }
 
-    if (type) where.type = type;
     if (status) where.status = status;
     if (priority) where.priority = priority;
     if (minAmount !== undefined)
@@ -139,20 +139,20 @@ export class OrdersService {
               avatar: true,
             },
           },
-        applications: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                username: true,
-                avatar: true,
-                bio: true,
-                skills: true,
-                tags: true,
+          applications: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  username: true,
+                  avatar: true,
+                  bio: true,
+                  skills: true,
+                  tags: true,
+                },
               },
             },
           },
-        },
           _count: {
             select: {
               applications: true,
@@ -166,7 +166,7 @@ export class OrdersService {
       const parseArr = (val: any) => {
         if (!val) return [] as string[];
         if (Array.isArray(val)) return val as string[];
-        if (typeof val === 'string') {
+        if (typeof val === "string") {
           try {
             const arr = JSON.parse(val);
             return Array.isArray(arr) ? (arr as string[]) : [];
@@ -264,7 +264,7 @@ export class OrdersService {
     const parseArr = (val: any) => {
       if (!val) return [] as string[];
       if (Array.isArray(val)) return val as string[];
-      if (typeof val === 'string') {
+      if (typeof val === "string") {
         try {
           const arr = JSON.parse(val);
           return Array.isArray(arr) ? (arr as string[]) : [];
@@ -335,7 +335,12 @@ export class OrdersService {
     }
 
     // 仅允许删除 已取消/已完成 的订单
-    if (!(order.status === OrderStatus.CANCELLED || order.status === OrderStatus.COMPLETED)) {
+    if (
+      !(
+        order.status === OrderStatus.CANCELLED ||
+        order.status === OrderStatus.COMPLETED
+      )
+    ) {
       throw new BadRequestException("仅已取消或已完成的订单可删除");
     }
 
@@ -506,8 +511,8 @@ export class OrdersService {
     // 过滤出交付物（kind=DELIVERABLE），兼容历史无 kind 数据：默认当作交付物处理
     return list.filter((m: any) => {
       try {
-        const meta = JSON.parse(m.description || '{}');
-        if (meta && meta.kind) return meta.kind === 'DELIVERABLE';
+        const meta = JSON.parse(m.description || "{}");
+        if (meta && meta.kind) return meta.kind === "DELIVERABLE";
       } catch {}
       return true;
     });
@@ -515,16 +520,19 @@ export class OrdersService {
 
   // 查看附件列表（双方可见）
   async getAttachments(orderId: string, userId: string, role?: string) {
-    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+    });
     if (!order) throw new NotFoundException("订单不存在");
     if (
       role !== "ADMIN" &&
       order.customerId !== userId &&
-      (order.designerId !== null && order.designerId !== userId)
+      order.designerId !== null &&
+      order.designerId !== userId
     ) {
       throw new ForbiddenException("无权查看该订单附件");
     }
-    
+
     const list = await this.prisma.material.findMany({
       where: { orderId },
       orderBy: { createdAt: "desc" },
@@ -540,8 +548,8 @@ export class OrdersService {
     });
     return list.filter((m: any) => {
       try {
-        const meta = JSON.parse(m.description || '{}');
-        return meta && meta.kind === 'ATTACHMENT';
+        const meta = JSON.parse(m.description || "{}");
+        return meta && meta.kind === "ATTACHMENT";
       } catch {
         return false;
       }
@@ -797,12 +805,16 @@ export class OrdersService {
       // 若已有受委派者，通知创作者订单被广告商取消
       try {
         if (order.designerId) {
-          this.notifications.notifyUser(order.designerId, 'order.cancelled.by.advertiser', {
-            id: `order-cancelled-by-advertiser-${order.id}`,
-            orderId: order.id,
-            amount: order.amount,
-            createdAt: new Date().toISOString(),
-          });
+          this.notifications.notifyUser(
+            order.designerId,
+            "order.cancelled.by.advertiser",
+            {
+              id: `order-cancelled-by-advertiser-${order.id}`,
+              orderId: order.id,
+              amount: order.amount,
+              createdAt: new Date().toISOString(),
+            }
+          );
         }
       } catch {}
       return updated;
@@ -894,5 +906,123 @@ export class OrdersService {
       completed,
       cancelled,
     };
+  }
+
+  // AI 智能匹配订单（仅创作者/设计师使用）
+  async smartMatch(userId: string, role: string) {
+    if (!(role === "CREATOR" || role === "DESIGNER")) {
+      // 非创作者角色返回空
+      return { data: [], notice: "仅创作者/设计师支持智能匹配" };
+    }
+
+    // 创作者画像
+    const creator = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { skills: true, tags: true },
+    });
+    const parseArr = (val: any) => {
+      if (!val) return [] as string[];
+      if (Array.isArray(val)) return val as string[];
+      if (typeof val === "string") {
+        try {
+          const arr = JSON.parse(val);
+          return Array.isArray(arr) ? (arr as string[]) : [];
+        } catch {
+          return [];
+        }
+      }
+      return [] as string[];
+    };
+    const creatorSkills = parseArr(creator?.skills);
+    const creatorTags = parseArr(creator?.tags);
+
+    // 候选订单：未接单的 PENDING，取最近 50 条
+    const candidates = await this.prisma.order.findMany({
+      where: { status: OrderStatus.PENDING, designerId: null },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      select: { id: true, title: true, requirements: true, tags: true },
+    });
+    const items = candidates.map((o) => ({
+      id: o.id,
+      requirements: parseArr((o as any).requirements),
+      tags: parseArr((o as any).tags),
+    }));
+
+    // 组织提示词
+    const sys =
+      '你是订单匹配器。只返回 JSON {"orderIds":["..."]}，不得包含其它内容。';
+    const userMsg = `创作者技能: ${creatorSkills.join(",") || "无"}\n创作者标签: ${creatorTags.join(",") || "无"}\n订单列表:\n${items.map((it) => `id=${it.id}; req=[${it.requirements.join(",")}]; tags=[${it.tags.join(",")}]`).join("\n")}\n请基于技能与标签推荐最匹配的 <=20 个订单，返回 orderIds 数组。`;
+
+    // 调用 AI 微服务
+    const base = process.env.AI_SERVICE_URL || "http://localhost:3001";
+    const url = `${base.replace(/\/$/, "")}/v1/chat`;
+    const headers: any = { "Content-Type": "application/json" };
+    const aiKey = process.env.AI_SERVICE_API_KEY;
+    if (aiKey) headers["X-API-Key"] = aiKey;
+    let pickedIds: string[] = [];
+    try {
+      const resp = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          messages: [
+            { role: "system", content: sys },
+            { role: "user", content: userMsg },
+          ],
+          provider: "qwen",
+          model: "qwen-plus",
+        }),
+      } as any);
+      if (!resp.ok) throw new Error(`AI ${resp.status}`);
+      const data: any = await resp.json();
+      
+      const text = data?.choices?.[0]?.message?.content || "";
+      const match = text.match(/\{[\s\S]*\}/);
+      if (match) {
+        try {
+          const obj = JSON.parse(match[0]);
+          const ids = Array.isArray(obj.orderIds)
+            ? obj.orderIds.filter((x: any) => typeof x === "string")
+            : [];
+          pickedIds = ids;
+        } catch {}
+      }
+    } catch (e) {
+      console.log("smartMatch AI error", e);
+      return { data: [], notice: "网络问题，AI 匹配暂不可用，请稍后再试" };
+    }
+    if (!pickedIds.length) {
+      return { data: [], notice: "网络问题，AI 匹配暂不可用，请稍后再试" };
+    }
+
+    const result = await this.prisma.order.findMany({
+      where: { id: { in: pickedIds } },
+      include: {
+        customer: {
+          select: {
+            id: true,
+            username: true,
+            email: true,
+            avatar: true,
+            company: true,
+          },
+        },
+        _count: { select: { applications: true } },
+      },
+    });
+    // 标注 aiMatched
+    const set = new Set(pickedIds);
+    const withFlag = result.map((o: any) => ({
+      ...o,
+      aiMatched: set.has(o.id),
+    }));
+    // 确保 tags 和 requirements 为数组
+    const normalized = withFlag.map((o: any) => ({
+      ...o,
+      tags: parseArr((o as any).tags),
+      requirements: parseArr((o as any).requirements),
+    }));
+    return { data: normalized, notice: "AI 已为您筛选出匹配的订单" };
   }
 }
