@@ -15,7 +15,13 @@ export class MaterialsService {
   }
 
   // 保存上传的文件记录到数据库
-  async saveUploadedFiles(userId: string, orderId: string, files: any, kind: 'ATTACHMENT' | 'DELIVERABLE' = 'DELIVERABLE') {
+  async saveUploadedFiles(
+    userId: string,
+    orderId: string | undefined,
+    files: any,
+    kind: 'ATTACHMENT' | 'DELIVERABLE' | 'PORTFOLIO' = 'DELIVERABLE',
+    portfolioId?: string,
+  ) {
     if (!files || files.length === 0) return [];
     const created = await this.prisma.$transaction(
       files.map((file) =>
@@ -28,6 +34,7 @@ export class MaterialsService {
             status: 'ACTIVE' as any,
             userId,
             orderId,
+            portfolioId,
           },
         })
       )
@@ -65,6 +72,24 @@ export class MaterialsService {
     const localPath = path.join(root, material.url.replace(/^\//, ''));
     if (!fs.existsSync(localPath)) throw new NotFoundException('文件不存在');
     return { localPath, material };
+  }
+
+  async findUserMaterials(
+    targetUserId: string,
+    requesterId: string,
+    requesterRole: string,
+  ) {
+    const where: any = { userId: targetUserId, orderId: null };
+    if (!(requesterRole === 'ADMIN' || requesterId === targetUserId)) {
+      // 非本人/非管理员：仅返回已归属到作品集、且作品集已审核的素材
+      where.portfolioId = { not: null };
+      where.portfolio = { status: 'ACTIVE' as any };
+    }
+    return this.prisma.material.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, url: true, title: true, createdAt: true, portfolioId: true },
+    });
   }
 }
 

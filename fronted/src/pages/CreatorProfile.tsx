@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Card, Form, Input, Upload, Button, Space, Tag, Row, Col, Statistic, message } from 'antd';
+import { Card, Form, Input, Upload, Button, Space, Tag, Row, Col, Statistic, message, Select, Divider } from 'antd';
 import { PlusOutlined, ShoppingCartOutlined, StarOutlined } from '@ant-design/icons';
 import type { UploadProps } from 'antd';
 import http, { resolveFileUrl } from '../store/api/http';
@@ -74,7 +74,10 @@ const CreatorProfile: React.FC = () => {
 
   const handleSave = async (values: any) => {
     try {
-      await http.patch('/auth/me', values);
+      const payload: any = { ...values };
+      if (Array.isArray(values.skills)) payload.skills = JSON.stringify(values.skills);
+      if (Array.isArray(values.tags)) payload.tags = JSON.stringify(values.tags);
+      await http.patch('/auth/me', payload);
       message.success('保存成功');
       setDirty(false);
       fetchProfile();
@@ -110,6 +113,25 @@ const CreatorProfile: React.FC = () => {
               <Form.Item name="paymentAccount" label="收款账户">
                 <Input placeholder="请输入你的收款账户" />
               </Form.Item>
+              <Divider />
+              <Form.Item name="skills" label="技能（可自定义录入，多项可回车分隔）">
+                <Select
+                  mode="tags"
+                  placeholder="如：剪辑、AE、PS、PR、脚本策划"
+                  tokenSeparators={[',', '，', ';', '；', ' ']}
+                  value={skills}
+                  onChange={(vals) => setSkills(vals as string[])}
+                />
+              </Form.Item>
+              <Form.Item name="tags" label="个性化标签（可自定义录入，多项可回车分隔）">
+                <Select
+                  mode="tags"
+                  placeholder="如：校园、旅行、科技、搞笑、时尚"
+                  tokenSeparators={[',', '，', ';', '；', ' ']}
+                  value={tags}
+                  onChange={(vals) => setTags(vals as string[])}
+                />
+              </Form.Item>
               <Form.Item label="头像">
                 <Upload {...uploadProps}>
                   {profile?.avatar ? (
@@ -133,7 +155,7 @@ const CreatorProfile: React.FC = () => {
             </Space>
           </Card>
           {skills && skills.length > 0 && (
-            <Card title="技能" style={{ marginTop: 16 }}>
+            <Card title="我的技能（预览）" style={{ marginTop: 16 }}>
               <Space wrap>
                 {skills.map(s => (
                   <Tag key={s} color="green">{s}</Tag>
@@ -142,7 +164,7 @@ const CreatorProfile: React.FC = () => {
             </Card>
           )}
           {tags && tags.length > 0 && (
-            <Card title="标签" style={{ marginTop: 16 }}>
+            <Card title="我的标签（预览）" style={{ marginTop: 16 }}>
               <Space wrap>
                 {tags.map(t => (
                   <Tag key={t} color="blue">{t}</Tag>

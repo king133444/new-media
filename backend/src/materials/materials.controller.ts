@@ -39,10 +39,11 @@ export class MaterialsController {
     @Request() req,
     @UploadedFiles() files: any,
     @Query('orderId') orderId?: string,
+    @Query('portfolioId') portfolioId?: string,
     @Query('kind') kind?: 'ATTACHMENT' | 'DELIVERABLE',
   ) {
     // 将上传的文件保存记录到数据库（kind: ATTACHMENT | DELIVERABLE）
-    const created = await this.materialsService.saveUploadedFiles(req.user.userId, orderId as string, files || [], kind);
+    const created = await this.materialsService.saveUploadedFiles(req.user.userId, orderId as string, files || [], kind, portfolioId as string);
     return created;
   }
 
@@ -89,6 +90,13 @@ export class MaterialsController {
     res.setHeader('Content-Length', stat.size.toString());
     const stream = fs.createReadStream(localPath);
     stream.pipe(res);
+  }
+
+  // 用户附件（无订单）列表：本人/管理员可见全部；广告商查看他人仅返回已审核作品集下的素材
+  @Get('user/:userId')
+  @UseGuards(JwtAuthGuard)
+  async listUserMaterials(@Request() req, @Param('userId') userId: string) {
+    return this.materialsService.findUserMaterials(userId, req.user.userId, req.user.role);
   }
 }
 

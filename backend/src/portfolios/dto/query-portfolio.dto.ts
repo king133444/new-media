@@ -15,11 +15,6 @@ export class QueryPortfolioDto {
   @Min(1)
   pageSize?: number = 10;
 
-  @ApiProperty({ description: '作品类型', required: false })
-  @IsOptional()
-  @IsString()
-  type?: string;
-
   @ApiProperty({ description: '状态', required: false, enum: PortfolioStatus })
   @IsOptional()
   @IsEnum(PortfolioStatus)
@@ -29,11 +24,6 @@ export class QueryPortfolioDto {
   @IsOptional()
   @IsString()
   keyword?: string;
-
-  @ApiProperty({ description: '标签', required: false })
-  @IsOptional()
-  @IsString()
-  tag?: string;
 
   @ApiProperty({ description: '用户ID', required: false })
   @IsOptional()

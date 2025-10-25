@@ -17,7 +17,7 @@ import {
   Empty,
   InputNumber,
   List,
-  Divider,
+  Pagination,
 } from "antd";
 import { Collapse } from "antd";
 import {
@@ -26,12 +26,14 @@ import {
   UserOutlined,
   FilterOutlined,
   SearchOutlined,
+  ReloadOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 // import type { ColumnsType } from "antd/es/table";
 import { useSelector } from "react-redux";
 import { RootState } from "../store";
 import http, { resolveFileUrl } from "../store/api/http";
+import { XiaomeiIcon } from "../components/AIAssistant";
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -202,7 +204,7 @@ const OrderPlaza: React.FC = () => {
       <Card style={{ marginBottom: 16 }}>
         <Row gutter={16}>
           {/* 已移除类型筛选 */}
-          <Col xs={24} sm={12} md={6}>
+          <Col xs={24} sm={12} md={4}>
             <div style={{ marginBottom: 4 }}>
               <Text type="secondary">紧急程度</Text>
             </div>
@@ -218,7 +220,7 @@ const OrderPlaza: React.FC = () => {
               <Option value="URGENT">紧急</Option>
             </Select>
           </Col>
-          <Col xs={24} sm={12} md={6}>
+          <Col xs={24} sm={12} md={4}>
             <div style={{ marginBottom: 4 }}>
               <Text type="secondary">最小金额</Text>
             </div>
@@ -231,7 +233,7 @@ const OrderPlaza: React.FC = () => {
               min={0}
             />
           </Col>
-          <Col xs={24} sm={12} md={6}>
+          <Col xs={24} sm={12} md={4}>
             <div style={{ marginBottom: 4 }}>
               <Text type="secondary">最大金额</Text>
             </div>
@@ -247,9 +249,7 @@ const OrderPlaza: React.FC = () => {
               min={0}
             />
           </Col>
-        </Row>
-        <Row gutter={16} style={{ marginTop: 16 }}>
-          <Col xs={24} sm={16} md={18}>
+          <Col xs={24} sm={12} md={4}>
             <div style={{ marginBottom: 4 }}>
               <Text type="secondary">关键词</Text>
             </div>
@@ -261,38 +261,72 @@ const OrderPlaza: React.FC = () => {
               }
             />
           </Col>
-          <Col xs={24} sm={8} md={6}>
+          <Col xs={24} sm={12} md={2}>
             <Button
-              type="primary"
-              icon={<FilterOutlined />}
-              onClick={fetchOrders}
-              block
+              style={{ marginTop: 26 }}
+              icon={<ReloadOutlined />}
+              onClick={() => {
+                setFilters({
+                  priority: "",
+                  minAmount: 0,
+                  maxAmount: undefined,
+                  keyword: "",
+                });
+                setAiSet(new Set());
+                setPage(1);
+                fetchOrders();
+              }}
             >
-              筛选
+              重置
             </Button>
           </Col>
+         
         </Row>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
-          <div style={{ color: '#666' }}>
-            还在为找不到心仪的订单而烦恼吗？试试 <strong>小媒 AI</strong> 筛选功能，可根据您的擅长技能与个性化标签匹配合适订单。
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-start",
+            alignItems: "center",
+            marginTop: 12,
+            
+          }}
+        >
+          <div style={{ color: "#666" }}>
+            还在为找不到心仪的订单而烦恼吗？试试 <strong>小媒 AI</strong>{" "}
+            筛选功能，可根据您的擅长技能与个性化标签匹配合适订单。
           </div>
           <Space>
-            <Button icon={<FilterOutlined />} onClick={() => { setAiSet(new Set()); setPage(1); fetchOrders(); }}>筛选</Button>
-            <Button onClick={() => { setFilters({ priority: "", minAmount: 0, maxAmount: undefined, keyword: "" }); setAiSet(new Set()); setPage(1); fetchOrders(); }}>重置</Button>
-            <Button type="primary" onClick={async () => {
-              try {
-                setLoading(true);
-                const { data } = await http.post('/orders/smart-match');
-                const list = data?.data || [];
-                setOrders(list);
-                setAiSet(new Set(list.map((x: any) => x.id)));
-                message.success(data?.notice || '已为您筛选');
-              } catch (e: any) {
-                message.error(e?.response?.data?.message || 'AI 筛选失败');
-              } finally {
-                setLoading(false);
-              }
-            }}>AI 智能筛选</Button>
+            {/* <Button
+              icon={<FilterOutlined />}
+              onClick={() => {
+                setAiSet(new Set());
+                setPage(1);
+                fetchOrders();
+              }}
+            >
+              筛选
+            </Button> */}
+            <Button
+              // type="primary"
+              icon={XiaomeiIcon}
+              style={{marginLeft: 60}}
+              onClick={async () => {
+                try {
+                  setLoading(true);
+                  const { data } = await http.post("/orders/smart-match");
+                  const list = data?.data || [];
+                  setOrders(list);
+                  setAiSet(new Set(list.map((x: any) => x.id)));
+                  message.success(data?.notice || "已为您筛选");
+                } catch (e: any) {
+                  message.error(e?.response?.data?.message || "AI 筛选失败");
+                } finally {
+                  setLoading(false);
+                }
+              }}
+            >
+              AI 智能筛选
+            </Button>
           </Space>
         </div>
       </Card>
@@ -303,72 +337,134 @@ const OrderPlaza: React.FC = () => {
           grid={{ gutter: 16, xs: 1, sm: 2, md: 2, lg: 3, xl: 3, xxl: 3 }}
           dataSource={orders}
           loading={loading}
-          pagination={{
-            current: page,
-            pageSize,
-            total,
-            showSizeChanger: false,
-            showQuickJumper: true,
-            showTotal: (t) => `共 ${t} 条`,
-            onChange: (p) => setPage(p),
-          }}
+          pagination={false}
           locale={{ emptyText: <Empty description="暂无订单" /> }}
           renderItem={(record) => (
             <List.Item key={record.id}>
               <Card
                 hoverable
-                style={{ position: 'relative' }}
+                style={{ position: "relative" }}
                 actions={[
-                  (
-                    <Tooltip title="查看详情" key={`view-${record.id}`}>
-                      <Button type="text" icon={<EyeOutlined />} onClick={() => viewOrderDetail(record)} >查看</Button>
-                    </Tooltip>
+                  <Tooltip title="查看详情" key={`view-${record.id}`}>
+                    <Button
+                      type="text"
+                      icon={<EyeOutlined />}
+                      onClick={() => viewOrderDetail(record)}
+                    >
+                      查看
+                    </Button>
+                  </Tooltip>,
+                  record.status === "PENDING" ? (
+                    (() => {
+                      const alreadyApplied = Array.isArray(record.applications)
+                        ? !!record.applications?.some(
+                            (app) => app.userId === user?.id
+                          )
+                        : false;
+                      if (alreadyApplied)
+                        return (
+                          <Tag key={`applied-${record.id}`} color="default">
+                            已申请
+                          </Tag>
+                        );
+                      return (
+                        <Button
+                          key={`apply-${record.id}`}
+                          type="link"
+                          icon={<SendOutlined />}
+                          onClick={() => {
+                            setSelectedOrder(record);
+                            setApplyModalVisible(true);
+                          }}
+                        >
+                          申请
+                        </Button>
+                      );
+                    })()
+                  ) : (
+                    <span key={`noaction-${record.id}`} />
                   ),
-                  (
-                    record.status === 'PENDING'
-                      ? (() => {
-                          const alreadyApplied = Array.isArray(record.applications)
-                            ? !!record.applications?.some((app) => app.userId === user?.id)
-                            : false;
-                          if (alreadyApplied) return <Tag key={`applied-${record.id}`} color="default">已申请</Tag>;
-                          return (
-                            <Button key={`apply-${record.id}`} type="link" icon={<SendOutlined />} onClick={() => { setSelectedOrder(record); setApplyModalVisible(true); }}>
-                              申请
-                            </Button>
-                          );
-                        })()
-                      : <span key={`noaction-${record.id}`} />
-                  )
                 ]}
+                title={
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "12px 6px",
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: 16,
+                          fontWeight: 600,
+                          lineHeight: 1.2,
+                          wordBreak: "break-all",
+                        }}
+                      >
+                        {record.title}
+                      </div>
+                      <div style={{ marginTop: 4 }}>
+                        {getPriorityText(record.priority)}
+                      </div>
+                    </div>
+                  </div>
+                }
+                extra={
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: 4,
+                    }}
+                  >
+                    {aiSet.has(record.id) && <Tag color="magenta">AI筛选</Tag>}
+                    <div style={{ textAlign: "right" }}>
+                      <Text
+                        strong
+                        style={{ color: "#1890ff", whiteSpace: "nowrap" }}
+                      >
+                        ¥{record.amount.toFixed(2)}
+                      </Text>
+                      <div style={{ marginTop: 4 }}>
+                        {getStatusTag(record.status)}
+                      </div>
+                    </div>
+                  </div>
+                }
               >
-                {aiSet.has(record.id) && (
-                  <Tag color="magenta" style={{ position: 'absolute', top: 8, left: 8 }}>AI</Tag>
-                )}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                  <div style={{ minWidth: 0 }}>
-                    <Title level={5} style={{ margin: 0, lineHeight: 1.2 }}>{record.title}</Title>
-                    <div style={{ marginTop: 4 }}>{getPriorityText(record.priority)}</div>
-                  </div>
-                  <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                    <Text strong style={{ color: '#1890ff', whiteSpace: 'nowrap' }}>¥{record.amount.toFixed(2)}</Text>
-                    <div>{getStatusTag(record.status)}</div>
-                  </div>
-                </div>
-
-                <Divider style={{ margin: '8px 0' }} />
-
                 <div>
-                  <Text type="secondary" style={{ display: 'block' }} ellipsis={{ tooltip: record.description }}>
+                  <Text
+                    type="secondary"
+                    style={{ display: "block" }}
+                    ellipsis={{ tooltip: record.description }}
+                  >
                     {record.description}
                   </Text>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-                  <Avatar src={resolveFileUrl(record.customer.avatar)} icon={<UserOutlined />} size="small" />
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    marginTop: 8,
+                  }}
+                >
+                  <Avatar
+                    src={resolveFileUrl(record.customer.avatar)}
+                    icon={<UserOutlined />}
+                    size="small"
+                  />
                   <div>
                     <Text strong>{record.customer.username}</Text>
                     {record.customer.company && (
-                      <div><Text type="secondary" style={{ fontSize: 12 }}>{record.customer.company}</Text></div>
+                      <div>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          {record.customer.company}
+                        </Text>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -379,7 +475,9 @@ const OrderPlaza: React.FC = () => {
                     <Text strong>需求标签：</Text>
                     <Space wrap style={{ marginTop: 4 }}>
                       {record.tags.map((t) => (
-                        <Tag key={t} color="blue">{t}</Tag>
+                        <Tag key={t} color="blue">
+                          {t}
+                        </Tag>
                       ))}
                     </Space>
                   </div>
@@ -391,35 +489,69 @@ const OrderPlaza: React.FC = () => {
                     <Text strong>项目需求：</Text>
                     <Space wrap style={{ marginTop: 4 }}>
                       {record.requirements.map((r) => (
-                        <Tag key={r} color="purple">{r}</Tag>
+                        <Tag key={r} color="purple">
+                          {r}
+                        </Tag>
                       ))}
                     </Space>
                   </div>
                 )}
                 {/* 截止时间说明，不换行 */}
-                <div style={{display: 'flex', justifyContent: 'space-between'}}>
-                <div style={{ marginTop: 8 }}>
-                  {record.deadline ? (
-                    <Text style={{ color: '#ff4d4f', fontSize: 12, whiteSpace: 'nowrap' }}>
-                      截止：{dayjs(record.deadline).format('YYYY-MM-DD HH:mm')}
-                    </Text>
-                  ) : (
-                    <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>截止：无要求</Text>
-                  )}
-                </div>
+                <div
+                  style={{ display: "flex", justifyContent: "space-between" }}
+                >
+                  <div style={{ marginTop: 8 }}>
+                    {record.deadline ? (
+                      <Text
+                        style={{
+                          color: "#ff4d4f",
+                          fontSize: 12,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        截止：
+                        {dayjs(record.deadline).format("YYYY-MM-DD HH:mm")}
+                      </Text>
+                    ) : (
+                      <Text
+                        type="secondary"
+                        style={{ fontSize: 12, whiteSpace: "nowrap" }}
+                      >
+                        截止：无要求
+                      </Text>
+                    )}
+                  </div>
 
-                {/* <Divider style={{ margin: '8px 0' }} /> */}
-                <div style={{ marginTop: 8 }}>
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    当前已有 {(record as any)._count?.applications || 0} 个申请
-                  </Text>
-                </div>
+                  {/* <Divider style={{ margin: '8px 0' }} /> */}
+                  <div style={{ marginTop: 8 }}>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      当前已有 {(record as any)._count?.applications || 0}{" "}
+                      个申请
+                    </Text>
+                  </div>
                 </div>
               </Card>
             </List.Item>
           )}
         />
       </Card>
+
+      {/* 分页器 */}
+      {total > 0 && (
+        <div
+          style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}
+        >
+          <Pagination
+            current={page}
+            pageSize={pageSize}
+            total={total}
+            showQuickJumper
+            showSizeChanger={false}
+            showTotal={(t) => `共 ${t} 条`}
+            onChange={(p) => setPage(p)}
+          />
+        </div>
+      )}
 
       {/* 订单详情模态框 */}
       <Modal
@@ -473,7 +605,7 @@ const OrderPlaza: React.FC = () => {
                           <List.Item.Meta
                             title={
                               <Typography.Link
-                              style={{color: '#1890ff'}}
+                                style={{ color: "#1890ff" }}
                                 onClick={async (e) => {
                                   e.preventDefault();
                                   try {
@@ -524,17 +656,22 @@ const OrderPlaza: React.FC = () => {
               </Collapse>
             </div>
 
-            {selectedOrder.description && <><Text strong>项目描述：</Text><div
-              style={{
-                marginTop: 8,
-                marginBottom: 16,
-                padding: 12,
-                background: "#f5f5f5",
-                borderRadius: 6,
-              }}
-            >
-              <Text>{selectedOrder.description}</Text>
-            </div></>}
+            {selectedOrder.description && (
+              <>
+                <Text strong>项目描述：</Text>
+                <div
+                  style={{
+                    marginTop: 8,
+                    marginBottom: 16,
+                    padding: 12,
+                    background: "#f5f5f5",
+                    borderRadius: 6,
+                  }}
+                >
+                  <Text>{selectedOrder.description}</Text>
+                </div>
+              </>
+            )}
 
             <Row gutter={16}>
               <Col span={8}>
@@ -595,24 +732,27 @@ const OrderPlaza: React.FC = () => {
               </Col>
             </Row>
 
-            {selectedOrder.requirements && selectedOrder.requirements.length > 0 && (
-              <div
-                style={{
-                  marginTop: 8,
-                  marginBottom: 16,
-                  padding: 12,
-                  background: "#f5f5f5",
-                  borderRadius: 6,
-                }}
-              >
-                <Text strong>项目需求：</Text>
-                <Space wrap style={{ marginTop: 8 }}>
-                  {selectedOrder.requirements.map((r) => (
-                    <Tag key={r} color="purple">{r}</Tag>
-                  ))}
-                </Space>
-              </div>
-            )}
+            {selectedOrder.requirements &&
+              selectedOrder.requirements.length > 0 && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    marginBottom: 16,
+                    padding: 12,
+                    background: "#f5f5f5",
+                    borderRadius: 6,
+                  }}
+                >
+                  <Text strong>项目需求：</Text>
+                  <Space wrap style={{ marginTop: 8 }}>
+                    {selectedOrder.requirements.map((r) => (
+                      <Tag key={r} color="purple">
+                        {r}
+                      </Tag>
+                    ))}
+                  </Space>
+                </div>
+              )}
 
             {selectedOrder.tags && selectedOrder.tags.length > 0 && (
               <>

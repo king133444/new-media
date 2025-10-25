@@ -57,7 +57,7 @@ class InspireRequest(BaseModel):
 
 
 class SuggestionsResponse(BaseModel):
-    role: Literal["creator", "advertiser"]
+    role: Literal["creator", "advertiser", "designer"]
     suggestions: List[str]
 
 

@@ -33,20 +33,16 @@ import type { ColumnsType } from 'antd/es/table';
 import type { UploadProps } from 'antd/es/upload';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
-import http from '../store/api/http';
+import http, { resolveFileUrl } from '../store/api/http';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
-const { Option } = Select;
+  const { Option } = Select;
 
 interface Portfolio {
   id: string;
   title: string;
   description: string;
-  type: string;
-  url: string;
-  thumbnail: string;
-  tags: string[];
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -56,6 +52,8 @@ interface Portfolio {
     avatar: string;
     role: string;
   };
+  materials?: Array<{ id: string; url: string; title?: string; createdAt: string }>;
+  thumbnail?: string;
 }
 
 const PortfolioManagement: React.FC = () => {
@@ -66,8 +64,9 @@ const PortfolioManagement: React.FC = () => {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editForm] = Form.useForm();
   const [stats, setStats] = useState<any>(null);
+  const [createThumbFile, setCreateThumbFile] = useState<any | null>(null);
+  const [createFiles, setCreateFiles] = useState<any[]>([]);
   const [filters, setFilters] = useState({
-    type: '',
     status: '',
     keyword: '',
   });
@@ -79,7 +78,6 @@ const PortfolioManagement: React.FC = () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (filters.type) params.append('type', filters.type);
       if (filters.status) params.append('status', filters.status);
       if (filters.keyword) params.append('keyword', filters.keyword);
 
@@ -110,10 +108,21 @@ const PortfolioManagement: React.FC = () => {
   // 创建作品集
   const handleCreate = async (values: any) => {
     try {
-      await http.post('/portfolios', values);
+      const form = new FormData();
+      form.append('title', values.title);
+      if (values.description) form.append('description', values.description);
+      if (createThumbFile?.originFileObj) {
+        form.append('thumbnail', createThumbFile.originFileObj);
+      }
+      (createFiles || []).forEach((f: any) => {
+        if (f.originFileObj) form.append('files', f.originFileObj);
+      });
+      await http.post('/portfolios', form, { headers: { 'Content-Type': 'multipart/form-data' } });
       message.success('作品集创建成功');
       setEditModalVisible(false);
       editForm.resetFields();
+      setCreateThumbFile(null);
+      setCreateFiles([]);
       fetchPortfolios();
       fetchStats();
     } catch (error: any) {
@@ -168,28 +177,16 @@ const PortfolioManagement: React.FC = () => {
   // 获取状态标签
   const getStatusTag = (status: string) => {
     const statusMap: { [key: string]: { color: string; text: string } } = {
-      ACTIVE: { color: 'green', text: '已发布' },
-      DRAFT: { color: 'orange', text: '草稿' },
-      ARCHIVED: { color: 'gray', text: '已归档' },
+      ACTIVE: { color: 'green', text: '已审核' },
+      INACTIVE: { color: 'orange', text: '待审核' },
+      DELETED: { color: 'gray', text: '已下架' },
     };
     const config = statusMap[status] || { color: 'default', text: status };
     return <Tag color={config.color}>{config.text}</Tag>;
   };
 
   // 获取类型标签
-  const getTypeTag = (type: string) => {
-    const typeMap: { [key: string]: { color: string; text: string } } = {
-      VIDEO: { color: 'purple', text: '视频' },
-      DESIGN: { color: 'cyan', text: '设计' },
-      H5: { color: 'blue', text: 'H5' },
-      ANIMATION: { color: 'orange', text: '动画' },
-      AUDIO: { color: 'green', text: '音频' },
-      PHOTO: { color: 'pink', text: '摄影' },
-      OTHER: { color: 'default', text: '其他' },
-    };
-    const config = typeMap[type] || { color: 'default', text: type };
-    return <Tag color={config.color}>{config.text}</Tag>;
-  };
+  // 类型已移除
 
   // 文件上传配置
   const uploadProps: UploadProps = {
@@ -197,24 +194,49 @@ const PortfolioManagement: React.FC = () => {
     listType: 'picture-card',
     showUploadList: false,
     beforeUpload: async (file: any) => {
+      if (!selectedPortfolio) {
+        message.warning('请先保存作品，再上传文件');
+        return false;
+      }
       const formData = new FormData();
-      formData.append('file', file);
-      
+      formData.append('files', file);
       try {
-        const { data } = await http.post('/upload/portfolio', formData, {
+        await http.post(`/materials/upload?portfolioId=${selectedPortfolio.id}`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
-        editForm.setFieldsValue({ url: data.url });
-        if (file.type.startsWith('image/')) {
-          editForm.setFieldsValue({ thumbnail: data.url });
-        }
         message.success('文件上传成功');
+        fetchPortfolios();
       } catch (error) {
         message.error('文件上传失败');
       }
       return false;
     },
   };
+
+  const createThumbUploadProps: UploadProps = {
+    name: 'file',
+    listType: 'picture-card',
+    showUploadList: false,
+    beforeUpload: async (file: any) => {
+      setCreateThumbFile({ originFileObj: file, name: file.name, url: URL.createObjectURL(file) });
+      return false;
+    },
+    onRemove: () => {
+      setCreateThumbFile(null);
+    },
+  } as any;
+
+  const createFilesUploadProps: UploadProps = {
+    multiple: true,
+    showUploadList: true,
+    beforeUpload: async (file: any) => {
+      setCreateFiles((prev) => [...prev, { originFileObj: file, name: file.name }]);
+      return false;
+    },
+    onRemove: (file: any) => {
+      setCreateFiles((prev) => prev.filter((f) => f.name !== file.name));
+    },
+  } as any;
 
   const columns: ColumnsType<Portfolio> = [
     {
@@ -224,14 +246,18 @@ const PortfolioManagement: React.FC = () => {
       render: (_, record) => (
         <div style={{ display: 'flex', gap: 12 }}>
           <div style={{ width: 80, height: 60, borderRadius: 6, overflow: 'hidden' }}>
-            {record.thumbnail ? (
+            {(() => {
+              const thumb = (record as any).thumbnail as string | undefined;
+              const first = record.materials && record.materials[0]?.url;
+              const src = thumb || first;
+              return src ? (
               <Image
-                src={record.thumbnail}
+                src={resolveFileUrl(src)}
                 alt={record.title}
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 preview={false}
               />
-            ) : (
+              ) : (
               <div style={{ 
                 width: '100%', 
                 height: '100%', 
@@ -242,16 +268,13 @@ const PortfolioManagement: React.FC = () => {
               }}>
                 <FileImageOutlined style={{ fontSize: 24, color: '#ccc' }} />
               </div>
-            )}
+            )})()}
           </div>
           <div style={{ flex: 1 }}>
             <Title level={5} style={{ margin: 0, marginBottom: 4 }}>
               {record.title}
             </Title>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
-              {getTypeTag(record.type)}
-              {getStatusTag(record.status)}
-            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>{getStatusTag(record.status)}</div>
             <Text type="secondary" ellipsis={{ tooltip: record.description}}>
               {record.description}
             </Text>
@@ -265,33 +288,12 @@ const PortfolioManagement: React.FC = () => {
       width: 120,
       render: (_, record) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Avatar src={record.user.avatar} icon={<UserOutlined />} size="small" />
+          <Avatar src={resolveFileUrl(record.user.avatar)} icon={<UserOutlined />} size="small" />
           <Text strong>{record.user.username}</Text>
         </div>
       ),
     },
-    {
-      title: '标签',
-      dataIndex: 'tags',
-      key: 'tags',
-      width: 200,
-      render: (tags: string[]) => (
-        <div>
-          {tags && tags.length > 0 ? (
-            <Space wrap>
-              {tags.slice(0, 3).map(tag => (
-                <Tag key={tag} color="blue">{tag}</Tag>
-              ))}
-              {tags.length > 3 && (
-                <Tag color="default">+{tags.length - 3}</Tag>
-              )}
-            </Space>
-          ) : (
-            <Text type="secondary">无标签</Text>
-          )}
-        </div>
-      ),
-    },
+    // 标签已移除
     {
       title: '发布时间',
       dataIndex: 'createdAt',
@@ -327,10 +329,6 @@ const PortfolioManagement: React.FC = () => {
                     editForm.setFieldsValue({
                       title: record.title,
                       description: record.description,
-                      type: record.type,
-                      url: record.url,
-                      thumbnail: record.thumbnail,
-                      tags: record.tags,
                       status: record.status,
                     });
                     setEditModalVisible(true);
@@ -388,8 +386,8 @@ const PortfolioManagement: React.FC = () => {
           <Col span={6}>
             <Card>
               <Statistic
-                title="已发布"
-                value={stats.byStatus?.ACTIVE || 0}
+                title="已审核"
+                value={stats.byStatus?.ACTIVE ?? 0}
                 prefix={<FileImageOutlined />}
               />
             </Card>
@@ -397,8 +395,8 @@ const PortfolioManagement: React.FC = () => {
           <Col span={6}>
             <Card>
               <Statistic
-                title="草稿"
-                value={stats.byStatus?.DRAFT || 0}
+                title="待审核"
+                value={stats.byStatus?.INACTIVE ?? 0}
                 prefix={<FileImageOutlined />}
               />
             </Card>
@@ -406,8 +404,8 @@ const PortfolioManagement: React.FC = () => {
           <Col span={6}>
             <Card>
               <Statistic
-                title="已归档"
-                value={stats.byStatus?.ARCHIVED || 0}
+                title="已下架"
+                value={stats.byStatus?.DELETED ?? 0}
                 prefix={<FileImageOutlined />}
               />
             </Card>
@@ -420,32 +418,15 @@ const PortfolioManagement: React.FC = () => {
         <Row gutter={16}>
           <Col xs={24} sm={8} md={6}>
             <Select
-              placeholder="选择类型"
-              style={{ width: '100%' }}
-              value={filters.type}
-              onChange={(value) => setFilters({ ...filters, type: value })}
-              allowClear
-            >
-              <Option value="VIDEO">视频</Option>
-              <Option value="DESIGN">设计</Option>
-              <Option value="H5">H5</Option>
-              <Option value="ANIMATION">动画</Option>
-              <Option value="AUDIO">音频</Option>
-              <Option value="PHOTO">摄影</Option>
-              <Option value="OTHER">其他</Option>
-            </Select>
-          </Col>
-          <Col xs={24} sm={8} md={6}>
-            <Select
               placeholder="选择状态"
               style={{ width: '100%' }}
               value={filters.status}
               onChange={(value) => setFilters({ ...filters, status: value })}
               allowClear
             >
-              <Option value="ACTIVE">已发布</Option>
-              <Option value="DRAFT">草稿</Option>
-              <Option value="ARCHIVED">已归档</Option>
+              <Option value="ACTIVE">已审核</Option>
+              <Option value="INACTIVE">待审核</Option>
+              <Option value="DELETED">已下架</Option>
             </Select>
           </Col>
           <Col xs={24} sm={8} md={12}>
@@ -492,7 +473,7 @@ const PortfolioManagement: React.FC = () => {
                 <div style={{ marginTop: 8, marginBottom: 16 }}>
                   <Title level={4} style={{ margin: 0 }}>{selectedPortfolio.title}</Title>
                   <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                    {getTypeTag(selectedPortfolio.type)}
+                    {/* {getTypeTag(selectedPortfolio.type)} */}
                     {getStatusTag(selectedPortfolio.status)}
                   </div>
                 </div>
@@ -501,7 +482,7 @@ const PortfolioManagement: React.FC = () => {
                 <Text strong>创作者：</Text>
                 <div style={{ marginTop: 8, marginBottom: 16 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Avatar src={selectedPortfolio.user.avatar} icon={<UserOutlined />} />
+                    <Avatar src={resolveFileUrl(selectedPortfolio.user.avatar)} icon={<UserOutlined />} />
                     <div>
                       <Text strong>{selectedPortfolio.user.username}</Text>
                       <div>
@@ -522,26 +503,31 @@ const PortfolioManagement: React.FC = () => {
 
             <Text strong>作品预览：</Text>
             <div style={{ marginTop: 8, marginBottom: 16 }}>
-              {selectedPortfolio.thumbnail ? (
-                <Image
-                  src={selectedPortfolio.thumbnail}
-                  alt={selectedPortfolio.title}
-                  style={{ maxWidth: '100%', borderRadius: 6 }}
-                />
-              ) : (
-                <div style={{ 
-                  padding: 40, 
-                  background: '#f5f5f5', 
-                  borderRadius: 6, 
-                  textAlign: 'center',
-                  color: '#999'
-                }}>
-                  暂无预览图
-                </div>
-              )}
+              {(() => {
+                const thumb = (selectedPortfolio as any).thumbnail as string | undefined;
+                const first = (selectedPortfolio as any).materials?.[0]?.url as string | undefined;
+                const src = thumb || first;
+                return src ? (
+                  <Image
+                    src={resolveFileUrl(src)}
+                    alt={selectedPortfolio.title}
+                    style={{ maxWidth: '100%', borderRadius: 6 }}
+                  />
+                ) : (
+                  <div style={{ 
+                    padding: 40, 
+                    background: '#f5f5f5', 
+                    borderRadius: 6, 
+                    textAlign: 'center',
+                    color: '#999'
+                  }}>
+                    暂无预览图
+                  </div>
+                );
+              })()}
             </div>
 
-            {selectedPortfolio.tags && selectedPortfolio.tags.length > 0 && (
+            {/* {selectedPortfolio.tags && selectedPortfolio.tags.length > 0 && (
               <>
                 <Text strong>标签：</Text>
                 <div style={{ marginTop: 8, marginBottom: 16 }}>
@@ -552,7 +538,7 @@ const PortfolioManagement: React.FC = () => {
                   </Space>
                 </div>
               </>
-            )}
+            )} */}
 
             <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f0f0f0' }}>
               <Row gutter={16}>
@@ -567,7 +553,7 @@ const PortfolioManagement: React.FC = () => {
                   </Text>
                 </Col>
               </Row>
-              <div style={{ marginTop: 8 }}>
+              {/* <div style={{ marginTop: 8 }}>
                 <Button 
                   type="link" 
                   href={selectedPortfolio.url} 
@@ -576,7 +562,7 @@ const PortfolioManagement: React.FC = () => {
                 >
                   查看完整作品 →
                 </Button>
-              </div>
+              </div> */}
             </div>
           </div>
         )}
@@ -589,6 +575,8 @@ const PortfolioManagement: React.FC = () => {
         onCancel={() => {
           setEditModalVisible(false);
           editForm.resetFields();
+          setCreateThumbFile(null);
+          setCreateFiles([]);
         }}
         footer={null}
         width={600}
@@ -613,67 +601,46 @@ const PortfolioManagement: React.FC = () => {
             <TextArea rows={4} placeholder="请输入作品描述" />
           </Form.Item>
 
-          <Form.Item
-            name="type"
-            label="作品类型"
-            rules={[{ required: true, message: '请选择作品类型' }]}
-          >
-            <Select placeholder="请选择作品类型">
-              <Option value="VIDEO">视频</Option>
-              <Option value="DESIGN">设计</Option>
-              <Option value="H5">H5</Option>
-              <Option value="ANIMATION">动画</Option>
-              <Option value="AUDIO">音频</Option>
-              <Option value="PHOTO">摄影</Option>
-              <Option value="OTHER">其他</Option>
-            </Select>
-          </Form.Item>
+          {selectedPortfolio ? (
+            <Form.Item label="上传作品文件（归档到当前作品集）">
+              <Upload {...uploadProps}>
+                <Button icon={<UploadOutlined />}>上传文件</Button>
+              </Upload>
+              <div style={{ marginTop: 8, fontSize: 12, color: '#999' }}>
+                支持图片、视频、音频等格式。已上传的文件显示在列表缩略图中。
+              </div>
+            </Form.Item>
+          ) : (
+            <>
+              <Form.Item label="缩略图（可选）">
+                <Upload {...createThumbUploadProps}>
+                  {createThumbFile ? (
+                    <Image src={createThumbFile.url} alt="thumb" style={{ width: 102, height: 102, objectFit: 'cover' }} />
+                  ) : (
+                    <Button icon={<UploadOutlined />}>上传缩略图</Button>
+                  )}
+                </Upload>
+              </Form.Item>
+              <Form.Item label="附件（可选，创建时一并上传）">
+                <Upload {...createFilesUploadProps}>
+                  <Button icon={<UploadOutlined />}>选择文件</Button>
+                </Upload>
+              </Form.Item>
+            </>
+          )}
 
-          <Form.Item
-            name="url"
-            label="作品链接"
-            rules={[{ required: true, message: '请输入作品链接' }]}
-          >
-            <Input placeholder="请输入作品链接或上传文件" />
-          </Form.Item>
-
-          <Form.Item
-            name="thumbnail"
-            label="缩略图"
-          >
-            <Input placeholder="请输入缩略图链接" />
-          </Form.Item>
-
-          <Form.Item label="文件上传">
-            <Upload {...uploadProps}>
-              <Button icon={<UploadOutlined />}>上传文件</Button>
-            </Upload>
-            <div style={{ marginTop: 8, fontSize: 12, color: '#999' }}>
-              支持图片、视频、音频等格式，上传后会自动填入链接
-            </div>
-          </Form.Item>
-
-          <Form.Item
-            name="tags"
-            label="标签"
-          >
-            <Select
-              mode="tags"
-              placeholder="输入标签后按回车"
-              style={{ width: '100%' }}
-            />
-          </Form.Item>
-
-          <Form.Item
-            name="status"
-            label="状态"
-          >
-            <Select>
-              <Option value="ACTIVE">已发布</Option>
-              <Option value="DRAFT">草稿</Option>
-              <Option value="ARCHIVED">已归档</Option>
-            </Select>
-          </Form.Item>
+          {selectedPortfolio && (
+            <Form.Item
+              name="status"
+              label="状态"
+            >
+              <Select disabled={user?.role !== 'ADMIN'}>
+                <Option value="ACTIVE">已审核</Option>
+                <Option value="INACTIVE">待审核</Option>
+                <Option value="DELETED">已下架</Option>
+              </Select>
+            </Form.Item>
+          )}
 
           <Form.Item>
             <Space>

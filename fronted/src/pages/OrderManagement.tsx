@@ -17,7 +17,10 @@ import {
   Card,
   Typography,
   Upload,
+  Tabs,
+  Image,
   Divider,
+  Pagination,
 } from "antd";
 import { Collapse } from "antd";
 import {
@@ -67,6 +70,13 @@ const OrderManagement: React.FC = () => {
   const [deliverablesLoading, setDeliverablesLoading] = useState(false);
   const [attActive, setAttActive] = useState<string[]>([]);
   const [devActive, setDevActive] = useState<string[]>([]);
+  const [portfoliosVisible, setPortfoliosVisible] = useState(false);
+  const [portfoliosLoading, setPortfoliosLoading] = useState(false);
+  const [portfolios, setPortfolios] = useState<any[]>([]);
+  const [portfoliosOwner, setPortfoliosOwner] = useState<{
+    id: string;
+    username?: string;
+  } | null>(null);
 
   const { user } = useSelector((state: RootState) => state.auth);
   const dispatch = useDispatch<AppDispatch>();
@@ -95,16 +105,17 @@ const OrderManagement: React.FC = () => {
           type: filters.type,
           keyword: filters.keyword,
           // 广告商查看全部
-          mine: user?.role === "ADVERTISER" ? false : undefined,
+          mine:
+            user?.role === "ADVERTISER"
+              ? false
+              : user?.role === "CREATOR" || user?.role === "DESIGNER"
+              ? true
+              : undefined,
           page,
           pageSize,
         },
       });
-      let list = data.data || [];
-      // 设计者/创作者：仅展示委派给自己的订单（我的订单）
-      if ((user?.role === "CREATOR" || user?.role === "DESIGNER") && user?.id) {
-        list = list.filter((o: any) => o.designer?.id === user.id);
-      }
+      const list = data.data || [];
       setOrders(list);
       setTotal(Number(data.total || 0));
       setTotalPages(Number(data.totalPages || 1));
@@ -595,6 +606,22 @@ const OrderManagement: React.FC = () => {
     }
   };
 
+  // 查看申请人的作品集（仅展示已审核的作品，后端会按角色过滤）
+  const openApplicantPortfolios = async (userId: string, username?: string) => {
+    setPortfoliosVisible(true);
+    setPortfoliosLoading(true);
+    setPortfolios([]);
+    setPortfoliosOwner({ id: userId, username });
+    try {
+      const { data } = await http.get("/portfolios", { params: { userId } });
+      setPortfolios(Array.isArray(data?.data) ? data.data : []);
+    } catch (e) {
+      message.error("获取作品集失败");
+    } finally {
+      setPortfoliosLoading(false);
+    }
+  };
+
   const handleAccept = async (orderId: string, applicationId: string) => {
     Modal.confirm({
       title: "确认委派给该创作者？",
@@ -890,20 +917,30 @@ const OrderManagement: React.FC = () => {
 
       {/* 分页器 */}
       {total > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
-          <Space>
-            <span style={{ color: '#999' }}>共 {total} 条</span>
-            <Select size="small" value={pageSize} onChange={(v) => { setPageSize(v); setPage(1); }} style={{ width: 100 }}>
-              <Select.Option value={6}>每页 6 条</Select.Option>
-              <Select.Option value={10}>每页 10 条</Select.Option>
-              <Select.Option value={20}>每页 20 条</Select.Option>
-            </Select>
-            <Space>
-              <Button size="small" disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>上一页</Button>
-              <span style={{ minWidth: 80, textAlign: 'center' }}>第 {page} / {Math.max(1, totalPages)} 页</span>
-              <Button size="small" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>下一页</Button>
-            </Space>
-          </Space>
+        <div
+          style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}
+        >
+          <Pagination
+            current={page}
+            pageSize={pageSize}
+            total={total}
+            showSizeChanger
+            pageSizeOptions={["6", "10", "20"]}
+            showQuickJumper
+            showTotal={(t, range) =>
+              `第 ${range[0]}-${range[1]} 条，共 ${t} 条`
+            }
+            onChange={(p, ps) => {
+              if (ps !== pageSize) {
+                setPageSize(ps);
+              }
+              setPage(p);
+            }}
+            onShowSizeChange={(_, ps) => {
+              setPageSize(ps);
+              setPage(1);
+            }}
+          />
         </div>
       )}
 
@@ -1496,6 +1533,221 @@ const OrderManagement: React.FC = () => {
         </Form>
       </Modal>
 
+      {/* 申请人作品集查看 */}
+      <Modal
+  title={
+    portfoliosOwner
+      ? `作品集：${portfoliosOwner.username || portfoliosOwner.id}`
+      : "作品集"
+  }
+  open={portfoliosVisible}
+  width={900}
+  footer={null}
+  onCancel={() => {
+    setPortfoliosVisible(false);
+    setPortfolios([]);
+    setPortfoliosOwner(null);
+  }}
+>
+  {portfoliosLoading ? (
+    <div style={{ textAlign: "center", padding: 24 }}>加载中...</div>
+  ) : portfolios.length === 0 ? (
+    <div style={{ textAlign: "center", padding: 24, color: "#999" }}>
+      无作品集
+    </div>
+  ) : (
+    <Tabs
+      items={portfolios.map((p: any) => ({
+        key: p.id,
+        label: (
+          <span>
+            {p.title}
+            <Tag
+              style={{ marginLeft: 8 }}
+              color={
+                p.status === "ACTIVE"
+                  ? "green"
+                  : p.status === "INACTIVE"
+                  ? "orange"
+                  : "default"
+              }
+            >
+              {p.status === "ACTIVE"
+                ? "已审核"
+                : p.status === "INACTIVE"
+                ? "待审核"
+                : "已下架"}
+            </Tag>
+          </span>
+        ),
+        children: (
+          <>
+            {/* 缩略图与描述部分（左右布局） */}
+            <div
+              style={{
+                display: "flex",
+                gap: 12,
+                alignItems: "center",
+                marginBottom: 12,
+              }}
+            >
+              {/* 左侧：缩略图 */}
+              <div
+                style={{
+                  width: 120,
+                  height: 90,
+                  borderRadius: 6,
+                  overflow: "hidden",
+                  background: "#f5f5f5",
+                }}
+              >
+                {(() => {
+                  const thumb = p.thumbnail;
+                  const first = p.materials?.[0]?.url;
+                  const src = thumb || first;
+                  return src ? (
+                    <Image
+                      src={resolveFileUrl(src)}
+                      alt={p.title}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                      }}
+                      preview={false}
+                    />
+                  ) : null;
+                })()}
+              </div>
+
+              {/* 右侧：作品描述 */}
+              <div
+                style={{
+                  flex: 1,
+                  color: "#666",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {p.description ? (
+                  p.description.length > 100 ? (
+                    <>
+                      {p.description.substring(0, 100)}...
+                      <span
+                        style={{ color: "blue", cursor: "pointer" }}
+                        onClick={() => alert(p.description)}
+                      >
+                        查看更多
+                      </span>
+                    </>
+                  ) : (
+                    p.description
+                  )
+                ) : (
+                  "暂无描述"
+                )}
+              </div>
+            </div>
+
+            {/* 折叠面板显示材料 */}
+            <Collapse defaultActiveKey={['1']}>
+              <Collapse.Panel header="材料展示" key="1">
+                {/* 如果没有材料则显示 "暂无材料" */}
+                {p.materials.length === 0 ? (
+                  <div style={{ textAlign: "center", color: "#999" }}>
+                    暂无材料
+                  </div>
+                ) : (
+                  p.materials.map((m: any) => (
+                    <Card
+                      key={m.id}
+                      hoverable
+                      style={{
+                        width: 150, // 保持材料展示的大小
+                        marginBottom: 12, // 添加底部间距
+                      }}
+                      cover={
+                        m.url && /\.(png|jpg|jpeg|gif|webp)$/i.test(m.url) ? (
+                          <Image
+                            src={resolveFileUrl(m.url)}
+                            alt={m.title || ""}
+                            style={{
+                              height: 100, // 保持图片的大小
+                              objectFit: "cover",
+                            }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              height: 100,
+                              background: "#f5f5f5",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              color: "#999",
+                            }}
+                          >
+                            无预览
+                          </div>
+                        )
+                      }
+                      actions={[
+                        <span
+                          key={`preview-${m.id}`}
+                          onClick={async () => {
+                            try {
+                              const resp = await http.get(
+                                `/materials/${m.id}/preview`,
+                                { responseType: "blob" }
+                              );
+                              const blob = new Blob([resp.data]);
+                              const filename =
+                                m.title || `material-${m.id}`;
+                              const nav: any = window.navigator;
+                              if (
+                                nav &&
+                                typeof nav.msSaveOrOpenBlob === "function"
+                              ) {
+                                nav.msSaveOrOpenBlob(blob, filename);
+                                return;
+                              }
+                              const url = window.URL.createObjectURL(blob);
+                              const a = document.createElement("a");
+                              a.href = url;
+                              a.download = filename;
+                              document.body.appendChild(a);
+                              a.click();
+                              a.remove();
+                              window.URL.revokeObjectURL(url);
+                            } catch {
+                              message.error("下载失败");
+                            }
+                          }}
+                        >
+                          下载/预览
+                        </span>,
+                      ]}
+                    >
+                      <Card.Meta
+                        title={m.title || "未命名文件"}
+                        description={dayjs(m.createdAt).format(
+                          "YYYY-MM-DD HH:mm"
+                        )}
+                      />
+                    </Card>
+                  ))
+                )}
+              </Collapse.Panel>
+            </Collapse>
+          </>
+        ),
+      }))}
+    />
+  )}
+</Modal>
+
+
       {/* 申请列表与委派 */}
       <Modal
         title="申请列表"
@@ -1534,6 +1786,17 @@ const OrderManagement: React.FC = () => {
                       : app?.status === "REJECTED"
                       ? "已拒绝"
                       : "委派"}
+                  </Button>,
+                  <Button
+                    key="view-portfolios"
+                    onClick={() =>
+                      openApplicantPortfolios(
+                        app.user?.id || app.userId,
+                        app.user?.username
+                      )
+                    }
+                  >
+                    作品集
                   </Button>,
                 ]}
               >

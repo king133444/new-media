@@ -9,26 +9,79 @@ import {
   Query,
   UseGuards,
   Request,
+  UseInterceptors,
+  UploadedFiles,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { PortfoliosService } from './portfolios.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { MaterialsService } from '../materials/materials.service';
 import { CreatePortfolioDto } from './dto/create-portfolio.dto';
 import { UpdatePortfolioDto } from './dto/update-portfolio.dto';
 import { QueryPortfolioDto } from './dto/query-portfolio.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { AnyFilesInterceptor } from '@nestjs/platform-express';
+import { Multer } from 'multer';
+
+import { diskStorage } from 'multer';
+import * as path from 'path';
+import * as fs from 'fs';
 
 @ApiTags('作品集管理')
 @Controller('portfolios')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class PortfoliosController {
-  constructor(private readonly portfoliosService: PortfoliosService) {}
+  constructor(
+    private readonly portfoliosService: PortfoliosService,
+    private readonly prisma: PrismaService,
+    private readonly materialsService: MaterialsService,
+  ) {}
 
   @Post()
-  @ApiOperation({ summary: '创建作品集' })
+  @UseInterceptors(
+    AnyFilesInterceptor({
+      storage: diskStorage({
+        destination: (req, file, cb) => {
+          const dest = path.join(process.cwd(), 'uploads', 'materials');
+          fs.mkdirSync(dest, { recursive: true });
+          cb(null, dest);
+        },
+        filename: (req, file, cb) => {
+          const ext = path.extname(file.originalname);
+          const name = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9-_]/g, '_');
+          cb(null, `${name}-${Date.now()}${ext}`);
+        },
+      }),
+      limits: { fileSize: 20 * 1024 * 1024 },
+    })
+  )
+  @ApiOperation({ summary: '创建作品集（支持同时上传缩略图与附件）' })
   @ApiResponse({ status: 201, description: '作品集创建成功' })
-  create(@Request() req, @Body() createPortfolioDto: CreatePortfolioDto) {
-    return this.portfoliosService.create(req.user.userId, createPortfolioDto);
+  async create(
+    @Request() req,
+    @Body() createPortfolioDto: CreatePortfolioDto,
+    @UploadedFiles() files: Array<Multer>,
+  ) {
+    const created = await this.portfoliosService.create(req.user.userId, req.user.role, createPortfolioDto);
+    const thumbFile = (files || []).find((f) => f.fieldname === 'thumbnail');
+    const attachFiles = (files || []).filter((f) => f.fieldname !== 'thumbnail');
+    // 设置缩略图（如果有）
+    if (thumbFile) {
+      const url = `/uploads/materials/${thumbFile.filename}`;
+      await this.prisma.portfolio.update({
+        where: { id: created.id },
+        data: { thumbnail: url },
+      });
+      (created as any).thumbnail = url;
+    }
+    // 归档附件到作品集
+    if (attachFiles.length) {
+      await this.materialsService.saveUploadedFiles(req.user.userId, undefined as any, attachFiles, 'PORTFOLIO', created.id);
+      const mats = await this.prisma.material.findMany({ where: ({ portfolioId: created.id } as any), orderBy: { createdAt: 'desc' } });
+      (created as any).materials = mats;
+    }
+    return created;
   }
 
   @Get()

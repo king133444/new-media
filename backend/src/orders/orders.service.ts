@@ -97,8 +97,12 @@ export class OrdersService {
         where.customerId = userId;
       }
     } else if (role === "CREATOR" || role === "DESIGNER") {
-      // 创作者只能看到未接单或自己接单的订单
-      where.OR = [{ designerId: null }, { designerId: userId }];
+      // mine=true: 仅查看属于自己的订单；否则：未接单或自己接单的订单
+      if (mine === true) {
+        where.designerId = userId;
+      } else {
+        where.OR = [{ designerId: null }, { designerId: userId }];
+      }
     }
 
     if (status) where.status = status;

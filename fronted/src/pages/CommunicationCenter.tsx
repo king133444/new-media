@@ -13,6 +13,10 @@ import {
   message,
   Empty,
   Tag,
+  Modal,
+  Tabs,
+  Image,
+  Collapse,
 } from "antd";
 import {
   SendOutlined,
@@ -77,6 +81,11 @@ const CommunicationCenter: React.FC = () => {
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [pfVisible, setPfVisible] = useState(false);
+  const [pfLoading, setPfLoading] = useState(false);
+  const [pfOwner, setPfOwner] = useState<any>(null);
+  const [pfPortfolios, setPfPortfolios] = useState<any[]>([]);
+  const [pfProfile, setPfProfile] = useState<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const userAtBottomRef = useRef<boolean>(true);
@@ -151,7 +160,9 @@ const CommunicationCenter: React.FC = () => {
     setLoading(true);
     try {
       const url = before
-        ? `/communications/conversations/${contactId}?limit=20&before=${encodeURIComponent(before)}`
+        ? `/communications/conversations/${contactId}?limit=20&before=${encodeURIComponent(
+            before
+          )}`
         : `/communications/conversations/${contactId}?limit=20`;
       const { data } = await http.get(url);
       if (before) {
@@ -190,6 +201,22 @@ const CommunicationCenter: React.FC = () => {
   const selectContact = useCallback((contact: any) => {
     setSelectedContact(contact);
     justSelectedRef.current = true;
+    // 乐观消除未读红点
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.contact.id === contact.id
+          ? {
+              ...c,
+              unreadCount: 0,
+              lastMessage: { ...c.lastMessage, status: "READ" as any },
+            }
+          : c
+      )
+    );
+    // 通知后端标记为已读
+    try {
+      wsEmit("communication.read", { contactId: contact.id });
+    } catch {}
     fetchMessages(contact.id);
     // 滚动到底部（使用容器 scroll 而非 scrollIntoView，避免页面整体跳动）
     setTimeout(() => {
@@ -280,6 +307,24 @@ const CommunicationCenter: React.FC = () => {
     const threshold = 80; // px
     userAtBottomRef.current =
       el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+  }, []);
+
+  const openUserPortfolios = useCallback(async (contact: any) => {
+    setPfOwner(contact);
+    setPfVisible(true);
+    setPfLoading(true);
+    try {
+      const [pfRes, profileRes] = await Promise.all([
+        http.get("/portfolios", { params: { userId: contact.id } }),
+        http.get(`/users/profile/${contact.id}`),
+      ]);
+      setPfPortfolios(Array.isArray(pfRes.data?.data) ? pfRes.data.data : []);
+      setPfProfile(profileRes.data || null);
+    } catch (e) {
+      message.error("获取作品集失败");
+    } finally {
+      setPfLoading(false);
+    }
   }, []);
 
   // 首次加载：拉取会话/联系人并绑定 WS 监听，只在初始运行
@@ -384,14 +429,19 @@ const CommunicationCenter: React.FC = () => {
     const params = new URLSearchParams(location.search);
     const contactId = params.get("contactId");
     if (!contactId) return;
-    const found = onlineUsers.find((u) => u.id === contactId);
-    if (found) {
-      selectContact(found);
-      return;
-    }
-    const conv = conversations.find((c) => c.contact.id === contactId);
-    if (conv) selectContact(conv.contact);
-  }, [location.search, onlineUsers, conversations, selectContact]);
+    // 已选择同一联系人则不重复触发，避免循环刷新/重复请求
+    if (selectedContact?.id === contactId) return;
+    const found =
+      onlineUsers.find((u) => u.id === contactId) ||
+      conversations.find((c) => c.contact.id === contactId)?.contact;
+    if (found) selectContact(found);
+  }, [
+    location.search,
+    onlineUsers,
+    conversations,
+    selectContact,
+    selectedContact,
+  ]);
 
   // 本页不再通过通知重复刷新，避免重复拉取与重复渲染
 
@@ -494,7 +544,7 @@ const CommunicationCenter: React.FC = () => {
               selectedContact ? (
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <Avatar
-                    src={selectedContact.avatar}
+                    src={resolveFileUrl(selectedContact.avatar)}
                     icon={<UserOutlined />}
                     size="small"
                   />
@@ -538,7 +588,9 @@ const CommunicationCenter: React.FC = () => {
                       onClick={() => {
                         if (!messages.length) return;
                         const first = messages[0];
-                        const beforeMs = (new Date(first.createdAt).getTime() - 1).toString();
+                        const beforeMs = (
+                          new Date(first.createdAt).getTime() - 1
+                        ).toString();
                         fetchMessages(selectedContact.id, beforeMs);
                       }}
                       loading={loading}
@@ -646,7 +698,7 @@ const CommunicationCenter: React.FC = () => {
                       autoSize={{ minRows: 2, maxRows: 6 }}
                       onKeyDown={(e) => {
                         const ne: any = e.nativeEvent as any;
-                        if (e.key === 'Enter' && !e.shiftKey) {
+                        if (e.key === "Enter" && !e.shiftKey) {
                           if (ne.isComposing) return; // 输入法组合中不发送
                           e.preventDefault();
                           sendMessage();
@@ -697,6 +749,15 @@ const CommunicationCenter: React.FC = () => {
                     >
                       发消息
                     </Button>,
+                    (user.role === "CREATOR" || user.role === "DESIGNER") && (
+                      <Button
+                        type="link"
+                        size="small"
+                        onClick={() => openUserPortfolios(user)}
+                      >
+                        作品集
+                      </Button>
+                    ),
                   ]}
                 >
                   <List.Item.Meta
@@ -718,9 +779,7 @@ const CommunicationCenter: React.FC = () => {
                         offset={[-2, 2]}
                       >
                         <Avatar
-                          src={
-                            resolveFileUrl(user.avatar)
-                          }
+                          src={resolveFileUrl(user.avatar)}
                           icon={<UserOutlined />}
                           size="small"
                         />
@@ -748,6 +807,229 @@ const CommunicationCenter: React.FC = () => {
           </Card>
         </Col>
       </Row>
+      {/* 作品集查看弹窗 */}
+      <Modal
+        title={pfOwner ? `作品集：${pfOwner.username}` : "作品集"}
+        open={pfVisible}
+        width={900}
+        footer={null}
+        onCancel={() => {
+          setPfVisible(false);
+          setPfPortfolios([]);
+          setPfProfile(null);
+          setPfOwner(null);
+        }}
+      >
+        {pfLoading ? (
+          <div style={{ textAlign: "center", padding: 24 }}>加载中...</div>
+        ) : (
+          <div>
+            {/* 基本资料：技能与标签 */}
+            {pfProfile && (
+              <Card size="small" style={{ marginBottom: 12 }}>
+                <Space direction="vertical" style={{ width: "100%" }}>
+                  {Array.isArray(pfProfile.skills) &&
+                    pfProfile.skills.length > 0 && (
+                      <div>
+                        <Text strong>擅长：</Text>
+                        <Space wrap style={{ marginLeft: 8 }}>
+                          {pfProfile.skills.map((s: string) => (
+                            <Tag key={`skill-${s}`} color="green">
+                              {s}
+                            </Tag>
+                          ))}
+                        </Space>
+                      </div>
+                    )}
+                  {Array.isArray(pfProfile.tags) &&
+                    pfProfile.tags.length > 0 && (
+                      <div>
+                        <Text strong>标签：</Text>
+                        <Space wrap style={{ marginLeft: 8 }}>
+                          {pfProfile.tags.map((t: string) => (
+                            <Tag key={`tag-${t}`} color="blue">
+                              {t}
+                            </Tag>
+                          ))}
+                        </Space>
+                      </div>
+                    )}
+                </Space>
+              </Card>
+            )}
+
+            {pfPortfolios.length === 0 ? (
+              <Empty description="暂无作品" />
+            ) : (
+              <Tabs
+                items={pfPortfolios.map((p: any) => ({
+                  key: p.id,
+                  label: (
+                    <span>
+                      {p.title}
+                      <Tag
+                        style={{ marginLeft: 8 }}
+                        color={
+                          p.status === "ACTIVE"
+                            ? "green"
+                            : p.status === "INACTIVE"
+                            ? "orange"
+                            : "default"
+                        }
+                      >
+                        {p.status === "ACTIVE"
+                          ? "已审核"
+                          : p.status === "INACTIVE"
+                          ? "待审核"
+                          : "已下架"}
+                      </Tag>
+                    </span>
+                  ),
+                  children: (
+                    <>
+                      {/* 缩略图与描述部分（左侧缩略图，右侧描述） */}
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 12,
+                          alignItems: "flex-start",
+                          marginBottom: 12,
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: 120,
+                            height: 90,
+                            borderRadius: 6,
+                            overflow: "hidden",
+                            background: "#f5f5f5",
+                            flex: "0 0 auto",
+                          }}
+                        >
+                          {(() => {
+                            const thumb = p.thumbnail;
+                            const first = p.materials?.[0]?.url;
+                            const src = thumb || first;
+                            return src ? (
+                              <Image
+                                src={resolveFileUrl(src)}
+                                alt={p.title}
+                                style={{
+                                  width: "100%",
+                                  height: "100%",
+                                  objectFit: "cover",
+                                }}
+                                preview={false}
+                              />
+                            ) : null;
+                          })()}
+                        </div>
+                        {p.description && (
+                          <div style={{ color: "#666" }}>{p.description}</div>
+                        )}
+                      </div>
+
+                      {/* 使用折叠面板显示材料 */}
+                      <Collapse defaultActiveKey={["1"]}>
+                        <Collapse.Panel header="材料展示" key="1">
+                          {/* 如果没有材料则显示 "暂无材料" */}
+                          {p.materials.length === 0 ? (
+                            <div style={{ textAlign: "center", color: "#999" }}>
+                              暂无材料
+                            </div>
+                          ) : (
+                            p.materials.map((m: any) => (
+                              <Card
+                                key={m.id}
+                                hoverable
+                                style={{
+                                  width: 150, // 保持材料展示的大小
+                                  marginBottom: 12, // 添加底部间距
+                                }}
+                                cover={
+                                  m.url &&
+                                  /\.(png|jpg|jpeg|gif|webp)$/i.test(m.url) ? (
+                                    <Image
+                                      src={resolveFileUrl(m.url)}
+                                      alt={m.title || ""}
+                                      style={{
+                                        height: 100, // 保持图片的大小
+                                        objectFit: "cover",
+                                      }}
+                                    />
+                                  ) : (
+                                    <div
+                                      style={{
+                                        height: 100,
+                                        background: "#f5f5f5",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        color: "#999",
+                                      }}
+                                    >
+                                      无预览
+                                    </div>
+                                  )
+                                }
+                                actions={[
+                                  <span
+                                    key={`preview-${m.id}`}
+                                    onClick={async () => {
+                                      try {
+                                        const resp = await http.get(
+                                          `/materials/${m.id}/preview`,
+                                          { responseType: "blob" }
+                                        );
+                                        const blob = new Blob([resp.data]);
+                                        const filename =
+                                          m.title || `material-${m.id}`;
+                                        const nav: any = window.navigator;
+                                        if (
+                                          nav &&
+                                          typeof nav.msSaveOrOpenBlob ===
+                                            "function"
+                                        ) {
+                                          nav.msSaveOrOpenBlob(blob, filename);
+                                          return;
+                                        }
+                                        const url =
+                                          window.URL.createObjectURL(blob);
+                                        const a = document.createElement("a");
+                                        a.href = url;
+                                        a.download = filename;
+                                        document.body.appendChild(a);
+                                        a.click();
+                                        a.remove();
+                                        window.URL.revokeObjectURL(url);
+                                      } catch {
+                                        message.error("下载失败");
+                                      }
+                                    }}
+                                  >
+                                    下载/预览
+                                  </span>,
+                                ]}
+                              >
+                                <Card.Meta
+                                  title={m.title || "未命名文件"}
+                                  description={dayjs(m.createdAt).format(
+                                    "YYYY-MM-DD HH:mm"
+                                  )}
+                                />
+                              </Card>
+                            ))
+                          )}
+                        </Collapse.Panel>
+                      </Collapse>
+                    </>
+                  ),
+                }))}
+              />
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };

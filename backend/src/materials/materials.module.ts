@@ -7,6 +7,7 @@ import { CommunicationsModule } from 'src/communications/communications.module';
   imports: [CommunicationsModule],
   providers: [MaterialsService],
   controllers: [MaterialsController],
+  exports: [MaterialsService],
 })
 export class MaterialsModule {}
 

@@ -81,39 +81,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           label: "订单管理",
         },
         {
-          key: "/reviews",
-          icon: <StarOutlined />,
-          label: "评价管理",
-        },
-        {
-          key: "/customers",
-          icon: <TeamOutlined />,
-          label: "客户管理",
-        },
-        {
-          key: "/materials/download",
-          icon: <DownloadOutlined />,
-          label: "素材下载",
-        },
-        {
-          key: "/materials/management",
-          icon: <FileOutlined />,
-          label: "素材管理",
-        },
-        {
-          key: "/system",
-          icon: <SettingOutlined />,
-          label: "系统管理",
-        },
-        {
-          key: "/hr",
-          icon: <UsergroupAddOutlined />,
-          label: "人力资源管理",
-        },
-        {
-          key: "/transactions",
-          icon: <DollarOutlined />,
-          label: "交易管理",
+          key: "/portfolios",
+          icon: <FileImageOutlined />,
+          label: "作品集管理",
         },
         {
           key: "/communication",
@@ -121,9 +91,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           label: "交流中心",
         },
         {
-          key: "/recommendations",
-          icon: <BulbOutlined />,
-          label: "内容推荐",
+          key: "/reviews",
+          icon: <StarOutlined />,
+          label: "评价管理",
         },
       ];
     } else if (user?.role === "ADVERTISER") {
@@ -527,7 +497,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             </Popover>
             <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
               <Avatar
-                style={{ backgroundColor: "#1890ff", cursor: "pointer" }}
+                style={{cursor: "pointer" }}
                 src={resolveFileUrl(user?.avatar)}
                 icon={<UserOutlined />}
               />

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePortfolioDto } from './dto/create-portfolio.dto';
 import { UpdatePortfolioDto } from './dto/update-portfolio.dto';
@@ -9,13 +9,17 @@ export class PortfoliosService {
   constructor(private prisma: PrismaService) {}
 
   // 创建作品集
-  async create(userId: string, createPortfolioDto: CreatePortfolioDto) {
-    return this.prisma.portfolio.create({
+  async create(userId: string, role: string, createPortfolioDto: CreatePortfolioDto) {
+    if (!(role === 'CREATOR' || role === 'DESIGNER')) {
+      throw new ForbiddenException('仅创作者可创建作品集');
+    }
+    const initialStatus = 'INACTIVE';
+    const created = await this.prisma.portfolio.create({
       data: {
         // 仅保留与当前模型一致的字段
         title: (createPortfolioDto as any).title,
         description: (createPortfolioDto as any).description,
-        status: (createPortfolioDto as any).status,
+        status: initialStatus as any,
         userId,
       },
       include: {
@@ -29,6 +33,8 @@ export class PortfoliosService {
         },
       },
     });
+    const materials = await this.prisma.material.findMany({ where: ({ portfolioId: created.id } as any), orderBy: { createdAt: 'desc' } });
+    return { ...created, materials } as any;
   }
 
   // 查询作品集列表
@@ -39,14 +45,17 @@ export class PortfoliosService {
     const where: any = {};
 
     // 根据角色过滤作品集
-    if (role === 'ADVERTISER' || role === 'CREATOR' || role === 'DESIGNER') {
-      // 普通用户只能看到自己的作品集
-      where.userId = userId;
-    }
-
-    // 如果指定了用户ID，查看特定用户的作品集
     if (targetUserId) {
+      // 指定用户ID：若为广告商，则仅可看已审核通过（ACTIVE）的作品
       where.userId = targetUserId;
+      if (role === 'ADVERTISER') {
+        where.status = 'ACTIVE';
+      }
+    } else if (role === 'ADMIN') {
+      // 管理员不限定 userId
+    } else {
+      // 其他角色默认仅查看自己的
+      where.userId = userId;
     }
 
     if (status) where.status = status;
@@ -62,7 +71,7 @@ export class PortfoliosService {
         where,
         skip,
         take: pageSize,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: 'asc' },
         include: {
           user: {
             select: {
@@ -77,8 +86,21 @@ export class PortfoliosService {
       this.prisma.portfolio.count({ where }),
     ]);
 
+    // 附加 materials 列表
+    const ids = portfolios.map((p) => p.id);
+    const materials = ids.length
+      ? await this.prisma.material.findMany({ where: ({ portfolioId: { in: ids } } as any), orderBy: { createdAt: 'desc' } })
+      : [];
+    const idToMaterials: Record<string, any[]> = {};
+    for (const m of materials as any[]) {
+      if (!m.portfolioId) continue;
+      if (!idToMaterials[m.portfolioId]) idToMaterials[m.portfolioId] = [];
+      idToMaterials[m.portfolioId].push(m);
+    }
+    const withMaterials = portfolios.map((p) => ({ ...(p as any), materials: idToMaterials[p.id] || [] }));
+
     return {
-      data: portfolios,
+      data: withMaterials,
       total,
       page,
       pageSize,
@@ -108,11 +130,18 @@ export class PortfoliosService {
     }
 
     // 权限检查
-    if ((role === 'ADVERTISER' || role === 'CREATOR' || role === 'DESIGNER') && portfolio.userId !== userId) {
+    if (role === 'ADMIN') {
+      // ok
+    } else if (portfolio.userId === userId) {
+      // owner ok
+    } else if (role === 'ADVERTISER' && (portfolio as any).status === 'ACTIVE') {
+      // 广告商可查看审核通过的
+    } else {
       throw new ForbiddenException('无权访问此作品集');
     }
 
-    return portfolio;
+    const materials = await this.prisma.material.findMany({ where: ({ portfolioId: id } as any), orderBy: { createdAt: 'desc' } });
+    return { ...(portfolio as any), materials };
   }
 
   // 更新作品集
@@ -128,6 +157,11 @@ export class PortfoliosService {
     // 只有管理员或作品集所有者可以更新
     if (role !== 'ADMIN' && portfolio.userId !== userId) {
       throw new ForbiddenException('无权修改此作品集');
+    }
+
+    // 审核：非管理员不得直接修改状态为 ACTIVE
+    if ((updatePortfolioDto as any).status && role !== 'ADMIN') {
+      delete (updatePortfolioDto as any).status;
     }
 
     const updatedPortfolio = await this.prisma.portfolio.update({
@@ -148,8 +182,8 @@ export class PortfoliosService {
         },
       },
     });
-
-    return updatedPortfolio;
+    const materials = await this.prisma.material.findMany({ where: ({ portfolioId: id } as any), orderBy: { createdAt: 'desc' } });
+    return { ...(updatedPortfolio as any), materials };
   }
 
   // 删除作品集
