@@ -6,3 +6,6 @@
 **/backend/uploads
 **/ai-service/.venv
 **/__pycache__
+**/build
+**/dist
+**/.DS_Store

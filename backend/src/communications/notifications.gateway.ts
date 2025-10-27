@@ -14,11 +14,16 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { JwtService } from '@nestjs/jwt';
 import { CommunicationsService } from './communications.service';
 
-@WebSocketGateway({
-  cors: {
-    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:8000'],
-    credentials: true,
+// 放宽 CORS 来源：生产环境建议通过 Nginx 同源反代，或用 CORS_ORIGINS 限制
+const wsCors = {
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    callback(null, true); // 允许所有来源
   },
+  credentials: true,
+};
+
+@WebSocketGateway({
+  cors: wsCors,
   namespace: '/ws',
 })
 export class NotificationsGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
