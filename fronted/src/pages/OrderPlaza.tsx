@@ -71,8 +71,9 @@ interface Order {
 const OrderPlaza: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [page, setPage] = useState<number>(1);
-  const [pageSize] = useState<number>(6);
+  const [pageSize, setPageSize] = useState<number>(6);
   const [total, setTotal] = useState<number>(0);
+  const [aiMode, setAiMode] = useState<boolean>(false);
   const [aiSet, setAiSet] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -94,25 +95,36 @@ const OrderPlaza: React.FC = () => {
   const fetchOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (filters.priority) params.append("priority", filters.priority);
-      if (filters.minAmount !== undefined)
-        params.append("minAmount", filters.minAmount?.toString());
-      if (filters.maxAmount !== undefined)
-        params.append("maxAmount", filters.maxAmount?.toString());
-      if (filters.keyword) params.append("keyword", filters.keyword);
-      params.append("page", String(page));
-      params.append("pageSize", String(pageSize));
-      params.append("status", "PENDING");
-      const { data } = await http.get(`/orders?${params.toString()}`);
-      setOrders(data.data || []);
-      setTotal(Number(data.total || 0));
+      if (aiMode) {
+        const params = new URLSearchParams();
+        params.append('page', String(page));
+        params.append('pageSize', String(pageSize));
+        const { data } = await http.post(`/orders/smart-match?${params.toString()}`);
+        const list = data?.data || [];
+        setOrders(list);
+        setAiSet(new Set(list.map((x: any) => x.id)));
+        setTotal(Number(data?.total || list.length || 0));
+      } else {
+        const params = new URLSearchParams();
+        if (filters.priority) params.append("priority", filters.priority);
+        if (filters.minAmount !== undefined)
+          params.append("minAmount", filters.minAmount?.toString());
+        if (filters.maxAmount !== undefined)
+          params.append("maxAmount", filters.maxAmount?.toString());
+        if (filters.keyword) params.append("keyword", filters.keyword);
+        params.append("page", String(page));
+        params.append("pageSize", String(pageSize));
+        params.append("status", "PENDING");
+        const { data } = await http.get(`/orders?${params.toString()}`);
+        setOrders(data.data || []);
+        setTotal(Number(data.total || 0));
+      }
     } catch (error) {
       message.error("获取订单列表失败");
     } finally {
       setLoading(false);
     }
-  }, [filters, page, pageSize]);
+  }, [filters, page, pageSize, aiMode]);
 
   useEffect(() => {
     fetchOrders();
@@ -274,8 +286,9 @@ const OrderPlaza: React.FC = () => {
                   keyword: "",
                 });
                 setAiSet(new Set());
-                setPage(1);
-                fetchOrders();
+                setAiMode(false);
+                setPage(1); // 交由 useEffect 触发加载，避免读到旧状态
+                setTotal(0);
               }}
             >
               重置
@@ -312,10 +325,17 @@ const OrderPlaza: React.FC = () => {
               onClick={async () => {
                 try {
                   setLoading(true);
-                  const { data } = await http.post("/orders/smart-match");
+                  const params = new URLSearchParams();
+                  params.append('page', '1');
+                  params.append('pageSize', String(pageSize));
+                  params.append('refresh', '1');
+                  const { data } = await http.post(`/orders/smart-match?${params.toString()}`);
                   const list = data?.data || [];
+                  setAiMode(true);
                   setOrders(list);
                   setAiSet(new Set(list.map((x: any) => x.id)));
+                  setPage(1);
+                  setTotal(Number(data?.total || list.length || 0));
                   message.success(data?.notice || "已为您筛选");
                 } catch (e: any) {
                   message.error(e?.response?.data?.message || "AI 筛选失败");
@@ -326,6 +346,20 @@ const OrderPlaza: React.FC = () => {
             >
               AI 智能筛选
             </Button>
+            {aiMode && (
+              <Button
+                danger
+                onClick={() => {
+                  setAiMode(false);
+                  setAiSet(new Set());
+                  setPage(1); // 交由 useEffect 根据 aiMode/page 变化重新加载
+                  setTotal(0);
+                  message.success('已退出 AI 筛选');
+                }}
+              >
+                退出AI筛选
+              </Button>
+            )}
           </Space>
         </div>
       </Card>
@@ -548,9 +582,14 @@ const OrderPlaza: React.FC = () => {
           <Pagination
             current={page}
             pageSize={pageSize}
+            showSizeChanger
+            onShowSizeChange={(p, ps) => {
+              setPageSize(ps);
+              setPage(1);
+            }}
+            pageSizeOptions={["6", "12"]}
+            defaultCurrent={6}
             total={total}
-            showQuickJumper
-            showSizeChanger={false}
             showTotal={(t) => `共 ${t} 条`}
             onChange={(p) => setPage(p)}
           />

@@ -49,8 +49,18 @@ export class OrdersController {
   @Post('smart-match')
   @ApiOperation({ summary: 'AI 智能匹配订单（创作者/设计师）' })
   @ApiResponse({ status: 200, description: '获取成功' })
-  smartMatch(@Request() req) {
-    return this.ordersService.smartMatch(req.user.userId, req.user.role);
+  smartMatch(
+    @Request() req,
+    @Query('page') page?: number,
+    @Query('pageSize') pageSize?: number,
+    @Query('refresh') refresh?: string,
+  ) {
+    const opts = {
+      page: page ? Number(page) : undefined,
+      pageSize: pageSize ? Number(pageSize) : undefined,
+      refresh: typeof refresh === 'string' ? ['1','true','yes','y','on'].includes(refresh.toLowerCase()) : false,
+    } as any;
+    return this.ordersService.smartMatch(req.user.userId, req.user.role, opts);
   }
 
   @Get(':id')

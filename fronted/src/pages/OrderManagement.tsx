@@ -925,8 +925,7 @@ const OrderManagement: React.FC = () => {
             pageSize={pageSize}
             total={total}
             showSizeChanger
-            pageSizeOptions={["6", "10", "20"]}
-            showQuickJumper
+            pageSizeOptions={["6", "12"]}
             showTotal={(t, range) =>
               `第 ${range[0]}-${range[1]} 条，共 ${t} 条`
             }

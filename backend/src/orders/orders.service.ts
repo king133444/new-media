@@ -913,10 +913,13 @@ export class OrdersService {
   }
 
   // AI 智能匹配订单（仅创作者/设计师使用）
-  async smartMatch(userId: string, role: string) {
+  // 内存缓存（简单实现）：key = userId
+  private aiCache: Map<string, { ids: string[]; updatedAt: number; sig: string }> = new Map();
+
+  async smartMatch(userId: string, role: string, opts?: { page?: number; pageSize?: number; refresh?: boolean }) {
     if (!(role === "CREATOR" || role === "DESIGNER")) {
       // 非创作者角色返回空
-      return { data: [], notice: "仅创作者/设计师支持智能匹配" };
+      return { data: [], notice: "仅创作者/设计师支持智能匹配", total: 0, page: 1, pageSize: 0, totalPages: 0 };
     }
 
     // 创作者画像
@@ -940,7 +943,7 @@ export class OrdersService {
     const creatorSkills = parseArr(creator?.skills);
     const creatorTags = parseArr(creator?.tags);
 
-    // 候选订单：未接单的 PENDING，取最近 50 条
+    // 候选订单：未接单的 PENDING，取最近 200 条
     const candidates = await this.prisma.order.findMany({
       where: { status: OrderStatus.PENDING, designerId: null },
       orderBy: { createdAt: "desc" },
@@ -965,40 +968,57 @@ export class OrdersService {
     const aiKey = process.env.AI_SERVICE_API_KEY;
     if (aiKey) headers["X-API-Key"] = aiKey;
     let pickedIds: string[] = [];
-    try {
-      const resp = await fetch(url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          messages: [
-            { role: "system", content: sys },
-            { role: "user", content: userMsg },
-          ],
-          provider: "qwen",
-          model: "qwen-plus",
-        }),
-      } as any);
-      if (!resp.ok) throw new Error(`AI ${resp.status}`);
-      const data: any = await resp.json();
-      
-      const text = data?.choices?.[0]?.message?.content || "";
-      const match = text.match(/\{[\s\S]*\}/);
-      if (match) {
-        try {
-          const obj = JSON.parse(match[0]);
-          const ids = Array.isArray(obj.orderIds)
-            ? obj.orderIds.filter((x: any) => typeof x === "string")
-            : [];
-          pickedIds = ids;
-        } catch {}
-      }
-    } catch (e) {
-      console.log("smartMatch AI error", e);
-      return { data: [], notice: "网络问题，AI 匹配暂不可用，请稍后再试" };
+    // 先查缓存
+    const cacheKey = userId;
+    // 如需刷新，先清理缓存
+    if (opts?.refresh) this.aiCache.delete(cacheKey);
+    const useCache = this.aiCache.get(cacheKey);
+    const now = Date.now();
+    const ttlMs = Number(process.env.SMART_MATCH_CACHE_TTL_MS || '600000'); // 默认10分钟
+    const profileSig = JSON.stringify({ skills: creatorSkills, tags: creatorTags });
+    const cacheValid = useCache && now - useCache.updatedAt < ttlMs && useCache.sig === profileSig;
+    if (!opts?.refresh && cacheValid) {
+      pickedIds = useCache!.ids;
     }
     if (!pickedIds.length) {
-      return { data: [], notice: "网络问题，AI 匹配暂不可用，请稍后再试" };
+      try {
+        const resp = await fetch(url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            messages: [
+              { role: "system", content: sys },
+              { role: "user", content: userMsg },
+            ],
+            provider: "qwen",
+            model: "qwen-flash",
+          }),
+        } as any);
+        if (!resp.ok) throw new Error(`AI ${resp.status}`);
+        const data: any = await resp.json();
+        
+        const text = data?.choices?.[0]?.message?.content || "";
+        const match = text.match(/\{[\s\S]*\}/);
+        if (match) {
+          try {
+            const obj = JSON.parse(match[0]);
+            const ids = Array.isArray(obj.orderIds)
+              ? obj.orderIds.filter((x: any) => typeof x === "string")
+              : [];
+            pickedIds = ids;
+          } catch {}
+        }
+      } catch (e) {
+        console.log("smartMatch AI error", e);
+        return { data: [], notice: "网络问题，AI 匹配暂不可用，请稍后再试", total: 0, page: 1, pageSize: 0, totalPages: 0 };
+      }
     }
+    if (!pickedIds.length) {
+      return { data: [], notice: "网络问题，AI 匹配暂不可用，请稍后再试", total: 0, page: 1, pageSize: 0, totalPages: 0 };
+    }
+
+    // 写缓存
+    this.aiCache.set(cacheKey, { ids: pickedIds, updatedAt: Date.now(), sig: profileSig });
 
     const result = await this.prisma.order.findMany({
       where: { id: { in: pickedIds } },
@@ -1027,6 +1047,16 @@ export class OrdersService {
       tags: parseArr((o as any).tags),
       requirements: parseArr((o as any).requirements),
     }));
-    return { data: normalized, notice: "AI 已为您筛选出匹配的订单" };
+    // 做小分页（基于缓存 ID 切片）
+    const page = Math.max(1, Number(opts?.page || 1));
+    const pageSize = Math.max(1, Math.min(50, Number(opts?.pageSize || 10)));
+    // 保持 pickedIds 次序，仅使用当前仍可见的ID
+    const idToOrder: Record<string, any> = Object.fromEntries(normalized.map((x: any) => [x.id, x]));
+    const availableIds = pickedIds.filter((id) => Boolean(idToOrder[id]));
+    const total = availableIds.length;
+    const start = (page - 1) * pageSize;
+    const sliceIds = availableIds.slice(start, start + pageSize);
+    const pageData = sliceIds.map((id) => idToOrder[id]);
+    return { data: pageData, notice: "AI 已为您筛选出匹配的订单", total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
   }
 }
