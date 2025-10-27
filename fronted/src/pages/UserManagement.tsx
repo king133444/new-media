@@ -1,39 +1,39 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Table, Button, Space, Tag, Modal, Form, Input, Select, message, Popconfirm } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons';
+import http from '../store/api/http';
 
 const UserManagement: React.FC = () => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [keyword, setKeyword] = useState('');
+  const [roleFilter, setRoleFilter] = useState<string | undefined>(undefined);
   const [form] = Form.useForm();
 
-  // 模拟用户数据
-  const [users, setUsers] = useState([
-    {
-      id: '1',
-      username: '张三',
-      email: 'zhangsan@example.com',
-      role: 'advertiser',
-      status: 'active',
-      createdAt: '2024-01-01',
-    },
-    {
-      id: '2',
-      username: '李四',
-      email: 'lisi@example.com',
-      role: 'creator',
-      status: 'active',
-      createdAt: '2024-01-02',
-    },
-    {
-      id: '3',
-      username: '王五',
-      email: 'wangwu@example.com',
-      role: 'designer',
-      status: 'inactive',
-      createdAt: '2024-01-03',
-    },
-  ]);
+  const [users, setUsers] = useState<any[]>([]);
+
+  const fetchUsers = async () => {
+    setLoading(true);
+    try {
+      const { data } = await http.get('/users');
+      setUsers(data || []);
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || '获取用户列表失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchUsers(); }, []);
+
+  const filteredUsers = useMemo(() => {
+    return users.filter(u => {
+      const okRole = roleFilter ? u.role === roleFilter : true;
+      const okKw = keyword ? (u.username?.includes(keyword) || u.email?.includes(keyword)) : true;
+      return okRole && okKw;
+    });
+  }, [users, roleFilter, keyword]);
 
   const columns = [
     {
@@ -52,25 +52,16 @@ const UserManagement: React.FC = () => {
       key: 'role',
       render: (role: string) => {
         const roleMap: { [key: string]: { text: string; color: string } } = {
-          admin: { text: '管理员', color: 'red' },
-          advertiser: { text: '广告商', color: 'blue' },
-          creator: { text: '创作者', color: 'green' },
-          designer: { text: '设计师', color: 'orange' },
+          ADMIN: { text: '管理员', color: 'red' },
+          ADVERTISER: { text: '广告商', color: 'blue' },
+          CREATOR: { text: '创作者', color: 'green' },
+          DESIGNER: { text: '设计师', color: 'orange' },
         };
         const roleInfo = roleMap[role] || { text: role, color: 'default' };
         return <Tag color={roleInfo.color}>{roleInfo.text}</Tag>;
       },
     },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
-      render: (status: string) => (
-        <Tag color={status === 'active' ? 'green' : 'red'}>
-          {status === 'active' ? '活跃' : '非活跃'}
-        </Tag>
-      ),
-    },
+    // 状态列移除（默认活跃，不展示）
     {
       title: '创建时间',
       dataIndex: 'createdAt',
@@ -81,22 +72,11 @@ const UserManagement: React.FC = () => {
       key: 'action',
       render: (_: any, record: any) => (
         <Space size="middle">
-          <Button
-            type="link"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-          >
+          <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
             编辑
           </Button>
-          <Popconfirm
-            title="确定要删除这个用户吗？"
-            onConfirm={() => handleDelete(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button type="link" danger icon={<DeleteOutlined />}>
-              删除
-            </Button>
+          <Popconfirm title="确定要删除这个用户吗？" onConfirm={() => handleDelete(record.id)} okText="确定" cancelText="取消">
+            <Button type="link" danger icon={<DeleteOutlined />}>删除</Button>
           </Popconfirm>
         </Space>
       ),
@@ -111,36 +91,39 @@ const UserManagement: React.FC = () => {
 
   const handleEdit = (user: any) => {
     setEditingUser(user);
-    form.setFieldsValue(user);
+    form.setFieldsValue({ username: user.username, email: user.email, role: user.role });
     setIsModalVisible(true);
   };
 
-  const handleDelete = (id: string) => {
-    setUsers(users.filter(user => user.id !== id));
-    message.success('删除成功');
+  const handleDelete = async (id: string) => {
+    try {
+      await http.delete(`/users/${id}`);
+      message.success('删除成功');
+      fetchUsers();
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || '删除失败');
+    }
   };
 
   const handleModalOk = () => {
-    form.validateFields().then(values => {
-      if (editingUser) {
-        // 编辑用户
-        setUsers(users.map(user => 
-          user.id === editingUser.id ? { ...user, ...values } : user
-        ));
-        message.success('用户更新成功');
-      } else {
-        // 添加用户
-        const newUser = {
-          id: Date.now().toString(),
-          ...values,
-          status: 'active',
-          createdAt: new Date().toISOString().split('T')[0],
-        };
-        setUsers([...users, newUser]);
-        message.success('用户添加成功');
+    form.validateFields().then(async (values) => {
+      try {
+        const payload: any = { username: values.username, email: values.email, role: values.role };
+        if (!editingUser && values.password) payload.password = values.password;
+        if (editingUser && values.password) payload.password = values.password; // 允许重置密码
+        if (editingUser) {
+          await http.patch(`/users/${editingUser.id}`, payload);
+          message.success('用户更新成功');
+        } else {
+          await http.post('/users', payload);
+          message.success('用户添加成功');
+        }
+        setIsModalVisible(false);
+        form.resetFields();
+        fetchUsers();
+      } catch (e: any) {
+        message.error(e?.response?.data?.message || (editingUser ? '更新失败' : '添加失败'));
       }
-      setIsModalVisible(false);
-      form.resetFields();
     });
   };
 
@@ -162,25 +145,27 @@ const UserManagement: React.FC = () => {
             placeholder="搜索用户"
             prefix={<SearchOutlined />}
             style={{ width: 200 }}
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
           />
-          <Select placeholder="按角色筛选" style={{ width: 120 }} allowClear>
-            <Select.Option value="admin">管理员</Select.Option>
-            <Select.Option value="advertiser">广告商</Select.Option>
-            <Select.Option value="creator">创作者</Select.Option>
-            <Select.Option value="designer">设计师</Select.Option>
+          <Select placeholder="按角色筛选" style={{ width: 160 }} allowClear value={roleFilter} onChange={setRoleFilter}>
+            <Select.Option value="ADMIN">管理员</Select.Option>
+            <Select.Option value="ADVERTISER">广告商</Select.Option>
+            <Select.Option value="DESIGNER">设计师</Select.Option>
           </Select>
         </Space>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} style={{display: 'none'}}>
           添加用户
         </Button>
       </div>
 
       <Table
         columns={columns}
-        dataSource={users}
+        dataSource={filteredUsers}
         rowKey="id"
+        loading={loading}
         pagination={{
-          total: users.length,
+          total: filteredUsers.length,
           pageSize: 10,
           showSizeChanger: true,
           showQuickJumper: true,
@@ -198,7 +183,7 @@ const UserManagement: React.FC = () => {
         <Form
           form={form}
           layout="vertical"
-          initialValues={{ role: 'advertiser', status: 'active' }}
+          initialValues={{ role: 'ADVERTISER' }}
         >
           <Form.Item
             name="username"
@@ -225,22 +210,15 @@ const UserManagement: React.FC = () => {
             rules={[{ required: true, message: '请选择角色' }]}
           >
             <Select placeholder="请选择角色">
-              <Select.Option value="admin">管理员</Select.Option>
-              <Select.Option value="advertiser">广告商</Select.Option>
-              <Select.Option value="creator">创作者</Select.Option>
-              <Select.Option value="designer">设计师</Select.Option>
+              <Select.Option value="ADMIN">管理员</Select.Option>
+              <Select.Option value="ADVERTISER">广告商</Select.Option>
+              <Select.Option value="DESIGNER">设计师</Select.Option>
             </Select>
           </Form.Item>
 
-          <Form.Item
-            name="status"
-            label="状态"
-            rules={[{ required: true, message: '请选择状态' }]}
-          >
-            <Select placeholder="请选择状态">
-              <Select.Option value="active">活跃</Select.Option>
-              <Select.Option value="inactive">非活跃</Select.Option>
-            </Select>
+          {/* 创建或编辑时允许设置新密码；编辑时留空表示不改 */}
+          <Form.Item name="password" label={editingUser ? '新密码（可选）' : '密码'} rules={editingUser ? [] : [{ required: true, message: '请输入密码' }, { min: 6, message: '至少6位' }]}>
+            <Input.Password placeholder={editingUser ? '留空则不修改' : '请输入密码'} />
           </Form.Item>
         </Form>
       </Modal>

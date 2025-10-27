@@ -85,7 +85,7 @@ async function streamInspire(
     role,
     topic,
     provider: "qwen",
-    model: "qwen-plus",
+    model: "qwen-flash",
     messages: filtered.map((m) => ({ role: m.role, content: m.content })),
   };
   const res = await fetch(`${AI_SERVICE_URL}/v1/assistant/inspire/stream`, {

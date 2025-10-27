@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, forwardRef, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -90,6 +90,24 @@ export class MaterialsService {
       orderBy: { createdAt: 'desc' },
       select: { id: true, url: true, title: true, createdAt: true, portfolioId: true },
     });
+  }
+
+  // 删除素材：文件与记录
+  async deleteMaterial(id: string, requesterId: string, requesterRole: string) {
+    const material = await this.prisma.material.findUnique({ where: { id } });
+    if (!material) throw new NotFoundException('文件不存在');
+    if (!(requesterRole === 'ADMIN' || material.userId === requesterId)) {
+      throw new ForbiddenException('无权删除此素材');
+    }
+    // 删除物理文件（忽略错误）
+    try {
+      const root = process.cwd();
+      const localPath = path.join(root, material.url.replace(/^\//, ''));
+      if (fs.existsSync(localPath)) fs.unlinkSync(localPath);
+    } catch {}
+    // 删除数据库记录
+    await this.prisma.material.delete({ where: { id } });
+    return { success: true };
   }
 }
 

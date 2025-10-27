@@ -27,6 +27,7 @@ import {
   FilterOutlined,
   SearchOutlined,
   ReloadOutlined,
+  CheckOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 // import type { ColumnsType } from "antd/es/table";
@@ -102,7 +103,7 @@ const OrderPlaza: React.FC = () => {
       if (filters.keyword) params.append("keyword", filters.keyword);
       params.append("page", String(page));
       params.append("pageSize", String(pageSize));
-
+      params.append("status", "PENDING");
       const { data } = await http.get(`/orders?${params.toString()}`);
       setOrders(data.data || []);
       setTotal(Number(data.total || 0));
@@ -280,7 +281,6 @@ const OrderPlaza: React.FC = () => {
               重置
             </Button>
           </Col>
-         
         </Row>
         <div
           style={{
@@ -288,7 +288,6 @@ const OrderPlaza: React.FC = () => {
             justifyContent: "flex-start",
             alignItems: "center",
             marginTop: 12,
-            
           }}
         >
           <div style={{ color: "#666" }}>
@@ -309,7 +308,7 @@ const OrderPlaza: React.FC = () => {
             <Button
               // type="primary"
               icon={XiaomeiIcon}
-              style={{marginLeft: 60}}
+              style={{ marginLeft: 60 }}
               onClick={async () => {
                 try {
                   setLoading(true);
@@ -363,9 +362,14 @@ const OrderPlaza: React.FC = () => {
                         : false;
                       if (alreadyApplied)
                         return (
-                          <Tag key={`applied-${record.id}`} color="default">
+                          <Button
+                            icon={<CheckOutlined />}
+                            key={`apply-${record.id}`}
+                            type="text"
+                            disabled
+                          >
                             已申请
-                          </Tag>
+                          </Button>
                         );
                       return (
                         <Button

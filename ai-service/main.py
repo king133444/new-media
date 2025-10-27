@@ -1,4 +1,5 @@
 import os
+import re
 import time
 import json
 from typing import List, Optional, Literal, Iterator, Dict
@@ -45,7 +46,7 @@ class InspireRequest(BaseModel):
     temperature: Optional[float] = 0.7
     max_tokens: Optional[int] = None
 
-    role: Literal["creator", "advertiser"]
+    role: Literal["creator", "advertiser", "designer", "admin"]
     topic: str = Field(..., min_length=1, description="主题，如：秋季新款卫衣")
     num_ideas: Optional[int] = 3
     style: Optional[str] = None  # 语气/风格，如：年轻、潮流、专业、可执行
@@ -57,7 +58,7 @@ class InspireRequest(BaseModel):
 
 
 class SuggestionsResponse(BaseModel):
-    role: Literal["creator", "advertiser", "designer"]
+    role: Literal["creator", "advertiser", "designer", "admin"]
     suggestions: List[str]
 
 
@@ -244,19 +245,26 @@ def create_app() -> FastAPI:
         return base
 
     def get_suggestions(role: str) -> List[str]:
-        if role == "creator":
+        if role == "creator" or role == "designer":
             return [
-                "给我3个短视频创意方向，主题是秋季新款卫衣。",
-                "基于潮流与校园场景，设计5个可执行拍摄脚本。",
-                "给我一段 15s 的开场钩子模板，适配穿搭类。",
-                "按『剧情反转』结构，写3条脚本提纲与口播。",
+                "如何针对抖音、快手、B站等不同平台特性适配同一内容？",
+                "如何针对抖音、快手、B站等不同平台特性适配同一内容？",
+                "如何避免跨平台分发时的版权重复或侵权风险？",
+                "媒介融合下，传统广告公司转型数字化需突破哪些瓶颈？"
+            ]
+        elif role == "admin": 
+            return [
+                "传统媒体转型新媒体广告的成功案例",
+                "2025年新媒体广告市场十大技术趋势",
+                "新媒体广告行业面临的挑战与机遇",
             ]
         else:
             return [
-                "面向18-25岁学生党，提炼 5 条卫衣卖点与钩子。",
-                "给出3个投放创意方向（抖音信息流），含CTA。",
-                "用AIDA模型写 3 条卫衣广告文案（每条≤80字）。",
-                "根据人群画像，推荐合适的达人种草视频切入点。",
+                "如何根据产品类型（快消/耐用品）制定跨媒介组合投放方案？",
+                "哪些数据指标能有效评估短视频广告的投放效果",
+                "2025年哪些新兴广告形式（如虚拟代言人、互动短剧）值得尝试？",
+                "与创作者合作时，合同条款需特别注意哪些版权风险？",
+                "AI创意生成工具能否替代传统广告设计？适用场景有哪些？"
             ]
 
     # ---- Debug logger for outgoing LLM requests ----
@@ -328,7 +336,7 @@ def create_app() -> FastAPI:
 
     # --- Inspire endpoints (domain prompts) ---
     @app.get("/v1/assistant/suggestions", response_model=SuggestionsResponse)
-    async def suggestions(role: Literal["creator", "advertiser", "designer"], _: None = Depends(verify_api_key)):
+    async def suggestions(role: Literal["creator", "advertiser", "designer", "admin"], _: None = Depends(verify_api_key)):
         return {"role": role, "suggestions": get_suggestions(role)}
 
     @app.post("/v1/assistant/inspire", response_model=ChatResponse)

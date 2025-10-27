@@ -132,7 +132,7 @@ const AdvertiserTransactionManagement: React.FC = () => {
         amount: values.amount,
         paymentMethod: values.paymentMethod,
       });
-      message.success('充值申请已提交');
+      message.success('充值成功');
       setDepositModalVisible(false);
       depositForm.resetFields();
       fetchTransactions();
@@ -450,7 +450,7 @@ const AdvertiserTransactionManagement: React.FC = () => {
           <Form.Item>
             <Space>
               <Button type="primary" htmlType="submit">
-                提交充值申请
+                确认充值
               </Button>
               <Button onClick={() => {
                 setDepositModalVisible(false);
@@ -506,7 +506,7 @@ const AdvertiserTransactionManagement: React.FC = () => {
           <Form.Item>
             <Space>
               <Button type="primary" htmlType="submit">
-                提交提现申请
+                确认提现
               </Button>
               <Button onClick={() => {
                 setWithdrawModalVisible(false);

@@ -53,7 +53,7 @@ export class PortfoliosController {
           cb(null, `${name}-${Date.now()}${ext}`);
         },
       }),
-      limits: { fileSize: 20 * 1024 * 1024 },
+      limits: { fileSize: (() => { const v = parseInt(process.env.MAX_FILE_SIZE || '', 10); return Number.isFinite(v) && v > 0 ? v : 500 * 1024 * 1024; })() },
     })
   )
   @ApiOperation({ summary: '创建作品集（支持同时上传缩略图与附件）' })

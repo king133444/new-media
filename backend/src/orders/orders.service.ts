@@ -595,7 +595,7 @@ export class OrdersService {
         data: { status: "COMPLETED" as any },
       });
 
-      // 生成待评价记录（双方各一条，若已存在则跳过）
+      // 生成待评价记录（仅广告商对创作者）
       const existingAdvertiserReview = await tx.review.findFirst({
         where: { orderId, reviewerId: advertiserId },
       });
@@ -609,19 +609,19 @@ export class OrdersService {
           },
         });
       }
-      const existingDesignerReview = await tx.review.findFirst({
-        where: { orderId, reviewerId: order.designerId! },
-      });
-      if (!existingDesignerReview) {
-        await tx.review.create({
-          data: {
-            orderId,
-            reviewerId: order.designerId!,
-            revieweeId: advertiserId,
-            status: "PENDING" as any,
-          },
-        });
-      }
+      // const existingDesignerReview = await tx.review.findFirst({
+      //   where: { orderId, reviewerId: order.designerId! },
+      // });
+      // if (!existingDesignerReview) {
+      //   await tx.review.create({
+      //     data: {
+      //       orderId,
+      //       reviewerId: order.designerId!,
+      //       revieweeId: advertiserId,
+      //       status: "PENDING" as any,
+      //     },
+      //   });
+      // }
 
       // 通知创作者已放款
       const ts = new Date().toISOString();

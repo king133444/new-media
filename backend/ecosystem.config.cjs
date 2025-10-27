@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'new-media-backend',
-      script: 'dist/main.js',
+      script: 'dist/src/main.js',
       instances: 1,
       exec_mode: 'fork',
       env: {
@@ -12,7 +12,7 @@ module.exports = {
         // 例如 root 密码 Jj123456@，库名 new_media：
         DATABASE_URL: 'mysql://root:Jj123456%40@localhost:3306/new_media',
         // JWT 与上传配置
-        JWT_SECRET: 'please-change-me',
+        JWT_SECRET: 'media_secret_key',
         JWT_EXPIRES_IN: '7d',
         UPLOAD_PATH: './uploads',
         MAX_FILE_SIZE: 10485760,

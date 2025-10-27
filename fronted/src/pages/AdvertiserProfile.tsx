@@ -79,6 +79,7 @@ const AdvertiserProfile: React.FC = () => {
   const [newTag, setNewTag] = useState("");
   const [bindAccountModalVisible, setBindAccountModalVisible] = useState(false);
   const [paymentAccount, setPaymentAccount] = useState<any>(null);
+  const [recentTxs, setRecentTxs] = useState<any[]>([]);
 
   const { user } = useSelector((state: RootState) => state.auth);
 
@@ -111,6 +112,16 @@ const AdvertiserProfile: React.FC = () => {
     }
   }, []);
 
+  // 最近交易
+  const fetchRecentTransactions = useCallback(async () => {
+    try {
+      const { data } = await http.get('/transactions', { params: { page: 1, pageSize: 5 } });
+      setRecentTxs(data.data || []);
+    } catch (e) {
+      // ignore
+    }
+  }, []);
+
   // 获取钱包信息
   const fetchWalletInfo = useCallback(async () => {
     try {
@@ -128,6 +139,10 @@ const AdvertiserProfile: React.FC = () => {
       fetchWalletInfo();
     }
   }, [user, fetchProfile, fetchStats, fetchWalletInfo]);
+
+  useEffect(() => {
+    if (user?.role === 'ADVERTISER') fetchRecentTransactions();
+  }, [user, fetchRecentTransactions]);
 
   // 更新个人资料
   const handleUpdateProfile = async (values: any) => {
@@ -252,11 +267,7 @@ const AdvertiserProfile: React.FC = () => {
         return <Tag color={config.color}>{config.text}</Tag>;
       },
     },
-    {
-      title: "描述",
-      dataIndex: "description",
-      key: "description",
-    },
+    // description 字段已移除
   ];
 
   if (user?.role !== "ADVERTISER") {
@@ -462,6 +473,7 @@ const AdvertiserProfile: React.FC = () => {
                 绑定收款账户
               </Button>
             }
+            style={{display: "none"}}
           >
             <Space direction="vertical" style={{ width: "100%" }}>
               <div>
@@ -498,7 +510,7 @@ const AdvertiserProfile: React.FC = () => {
             <Table
               size="small"
               columns={transactionColumns}
-              dataSource={[]}
+              dataSource={recentTxs}
               pagination={false}
               locale={{ emptyText: "暂无交易记录" }}
             />

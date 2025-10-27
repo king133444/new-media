@@ -52,7 +52,7 @@ const OrderManagement: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState<{
     status?: string;
-    type?: string;
+    // type?: string;
     keyword?: string;
   }>({});
   const [appModalVisible, setAppModalVisible] = useState(false);
@@ -102,7 +102,7 @@ const OrderManagement: React.FC = () => {
       const { data } = await http.get("/orders", {
         params: {
           status: filters.status,
-          type: filters.type,
+          // type: filters.type,
           keyword: filters.keyword,
           // 广告商查看全部
           mine:
@@ -691,7 +691,7 @@ const OrderManagement: React.FC = () => {
               <Select.Option value="CANCELLED">已取消</Select.Option>
             </Select>
           </div>
-          <div>
+          {/* <div>
             <div style={{ marginBottom: 4, color: "#999" }}>类型</div>
             <Select
               style={{ width: 160 }}
@@ -706,8 +706,8 @@ const OrderManagement: React.FC = () => {
               <Select.Option value="AUDIO">音频</Select.Option>
               <Select.Option value="OTHER">其他</Select.Option>
             </Select>
-          </div>
-          <div style={{ alignSelf: "flex-end" }}>
+          </div> */}
+          <div style={{ alignSelf: "flex-end", marginTop: 24, }}>
             <Button type="primary" onClick={fetchOrders}>
               查询
             </Button>
@@ -898,7 +898,7 @@ const OrderManagement: React.FC = () => {
                   >
                     <div>客户：{o.customer?.username || "-"}</div>
                     <div>设计师：{o.designer?.username || "-"}</div>
-                    <div>类型：{o.type}</div>
+                    {/* <div>类型：{o.type}</div> */}
                     <div>金额：¥{Number(o.amount || 0).toFixed(2)}</div>
                     <div>
                       截止：
@@ -1021,7 +1021,7 @@ const OrderManagement: React.FC = () => {
                       申请/委派
                     </Button>
                   )}
-                {user?.role !== "ADVERTISER" &&
+                {/* {user?.role !== "ADVERTISER" &&
                   viewOrder.status === "IN_PROGRESS" &&
                   viewOrder.designer?.id === user?.id && (
                     <Space>
@@ -1070,7 +1070,7 @@ const OrderManagement: React.FC = () => {
                         提交交付物
                       </Button>
                     </Space>
-                  )}
+                  )} */}
               </div>
             </Card>
 

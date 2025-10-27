@@ -758,7 +758,7 @@ const CommunicationCenter: React.FC = () => {
                         作品集
                       </Button>
                     ),
-                  ]}
+                  ].filter(Boolean)}
                 >
                   <List.Item.Meta
                     avatar={

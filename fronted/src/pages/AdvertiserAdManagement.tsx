@@ -38,12 +38,12 @@ const AdvertiserAdManagement: React.FC = () => {
         .map((t: string) => t.trim())
         .filter((t: string) => t);
       const typeCodes: string[] = Array.isArray(values.types) ? values.types : (values.type ? [values.type] : []);
-      const primaryType = typeCodes[0] || 'OTHER';
+      // const primaryType = typeCodes[0] || 'OTHER';
       const typeChinese: string[] = typeCodes.map((c) => labelMap[c] || c);
       const payload: CreateOrderPayload = {
         title: values.title,
         description: values.description,
-        type: primaryType as any,
+        // type: primaryType as any,
         amount: values.amount,
         priority: values.priority,
         deadline: values.deadline ? (values.deadline as dayjs.Dayjs).toISOString() : undefined,

@@ -1,4 +1,4 @@
-import { Controller, Post, UseGuards, UseInterceptors, UploadedFiles, UploadedFile, Body, Query, Request, Get, Param, Res, BadRequestException } from '@nestjs/common';
+import { Controller, Post, UseGuards, UseInterceptors, UploadedFiles, UploadedFile, Body, Query, Request, Get, Param, Res, BadRequestException, Delete } from '@nestjs/common';
 import { MaterialsService } from './materials.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AnyFilesInterceptor, FileInterceptor } from '@nestjs/platform-express';
@@ -32,7 +32,7 @@ export class MaterialsController {
           cb(null, `${safeBase || 'file'}-${stamp}${ext}`);
         },
       }),
-      limits: { fileSize: 20 * 1024 * 1024 },
+      limits: { fileSize: (() => { const v = parseInt(process.env.MAX_FILE_SIZE || '', 10); return Number.isFinite(v) && v > 0 ? v : 500 * 1024 * 1024; })() },
     })
   )
   async upload(
@@ -64,7 +64,7 @@ export class MaterialsController {
           cb(null, `${name}-${Date.now()}${ext}`);
         },
       }),
-      limits: { fileSize: 5 * 1024 * 1024 },
+      limits: { fileSize: (() => { const v = parseInt(process.env.MAX_FILE_SIZE || '', 10); return Number.isFinite(v) && v > 0 ? Math.min(v, 20 * 1024 * 1024) : 10 * 1024 * 1024; })() },
     })
   )
   async uploadAvatar(
@@ -97,6 +97,13 @@ export class MaterialsController {
   @UseGuards(JwtAuthGuard)
   async listUserMaterials(@Request() req, @Param('userId') userId: string) {
     return this.materialsService.findUserMaterials(userId, req.user.userId, req.user.role);
+  }
+
+  // 删除素材：仅限本人或管理员
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard)
+  async remove(@Request() req, @Param('id') id: string) {
+    return this.materialsService.deleteMaterial(id, req.user.userId, req.user.role);
   }
 }
 

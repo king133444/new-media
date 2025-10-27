@@ -9,20 +9,19 @@ import {
   Badge,
   Popover,
   List,
+  Modal,
+  Form,
+  Input,
+  message,
 } from "antd";
 import {
   DashboardOutlined,
   UserOutlined,
   ShoppingCartOutlined,
   StarOutlined,
-  TeamOutlined,
-  DownloadOutlined,
-  FileOutlined,
   SettingOutlined,
-  UsergroupAddOutlined,
   DollarOutlined,
   MessageOutlined,
-  BulbOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -35,7 +34,7 @@ import { AppDispatch, RootState } from "../store";
 import { markAsRead, markAllAsRead } from "../store/slices/notificationSlice";
 import { wsEmit } from "../store/websocket";
 import { logout } from "../store/slices/authSlice";
-import { resolveFileUrl } from "../store/api/http";
+import http, { resolveFileUrl } from "../store/api/http";
 import AIAssistant from './AIAssistant';
 
 const { Header, Sider, Content } = AntLayout;
@@ -185,25 +184,46 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     navigate("/login");
   };
 
+  const [pwdVisible, setPwdVisible] = useState(false);
+  const [pwdForm] = Form.useForm();
+
+  async function handleChangePassword(values: any) {
+    try {
+      await http.post('/auth/login', { username: user?.username, password: values.oldPassword });
+      await http.patch('/auth/me', { password: values.newPassword });
+      message.success('密码修改成功');
+      setPwdVisible(false);
+      pwdForm.resetFields();
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || '修改失败');
+    }
+  }
+
   const userMenuItems = [
-    {
-      key: "profile",
-      icon: <UserOutlined />,
-      label: "个人资料",
-      onClick: () => {
-        if (user?.role === "ADVERTISER") navigate("/advertiser/profile");
-        else if (user?.role === "CREATOR" || user?.role === "DESIGNER")
-          navigate("/creator/profile");
-        else navigate("/dashboard");
-      },
-    },
+    // {
+    //   key: "profile",
+    //   icon: <UserOutlined />,
+    //   label: "个人资料",
+    //   onClick: () => {
+    //     if (user?.role === "ADVERTISER") navigate("/advertiser/profile");
+    //     else if (user?.role === "CREATOR" || user?.role === "DESIGNER")
+    //       navigate("/creator/profile");
+    //     else navigate("/dashboard");
+    //   },
+    // },
     // {
     //   key: 'settings',
     //   icon: <SettingOutlined />,
     //   label: '设置',
     // },
+    // {
+    //   type: "divider" as const,
+    // },
     {
-      type: "divider" as const,
+      key: "change-password",
+      icon: <SettingOutlined />,
+      label: "修改密码",
+      onClick: () => setPwdVisible(true),
     },
     {
       key: "logout",
@@ -504,6 +524,29 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             </Dropdown>
           </div>
         </Header>
+        <Modal
+          title="修改密码"
+          open={pwdVisible}
+          onCancel={() => { setPwdVisible(false); pwdForm.resetFields(); }}
+          onOk={() => pwdForm.submit()}
+          okText="保存"
+          cancelText="取消"
+        >
+          <Form form={pwdForm} layout="vertical" onFinish={handleChangePassword}>
+            <Form.Item name="oldPassword" label="原密码" rules={[{ required: true, message: '请输入原密码' }]}>
+              <Input.Password autoComplete="current-password" />
+            </Form.Item>
+            <Form.Item name="newPassword" label="新密码" rules={[{ required: true, message: '请输入新密码' }, { min: 6, message: '至少6位' }]}>
+              <Input.Password autoComplete="new-password" />
+            </Form.Item>
+            <Form.Item name="confirm" label="确认新密码" dependencies={["newPassword"]} rules={[
+              { required: true, message: '请再次输入新密码' },
+              ({ getFieldValue }) => ({ validator(_, value) { return !value || getFieldValue('newPassword') === value ? Promise.resolve() : Promise.reject(new Error('两次输入不一致')); }})
+            ]}>
+              <Input.Password autoComplete="new-password" />
+            </Form.Item>
+          </Form>
+        </Modal>
         <Content
           style={{
             margin: "24px 16px",

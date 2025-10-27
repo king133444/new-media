@@ -232,7 +232,7 @@ Body 示例：
   "topic":"秋季新款卫衣",       # 若无 messages，则以 topic 作为一条 user 消息
   "messages":[{"role":"user","content":"给我 3 个短视频创意方向"}],
   "provider":"qwen",
-  "model":"qwen-plus"
+  "model":"qwen-flash"
 }
 ```
 

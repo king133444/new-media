@@ -216,7 +216,7 @@ export class TransactionsService {
 
   // 充值
   async deposit(userId: string, amount: number, paymentMethod: string) {
-    return this.create(userId, { amount, type: TransactionType.DEPOSIT } as any);
+    return this.create(userId, { amount, type: TransactionType.DEPOSIT, status: TransactionStatus.COMPLETED } as any);
   }
 
   // 提现
@@ -231,7 +231,7 @@ export class TransactionsService {
       throw new BadRequestException('余额不足');
     }
 
-    return this.create(userId, { amount, type: TransactionType.WITHDRAWAL } as any);
+    return this.create(userId, { amount, type: TransactionType.WITHDRAWAL, status: TransactionStatus.COMPLETED } as any);
   }
 
   // 支付订单
