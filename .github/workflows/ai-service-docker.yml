@@ -102,6 +102,13 @@ jobs:
         run: |
           echo "EXT=${{ env.FORMAT }}" >> $GITHUB_ENV
           echo "FILE=ai-service_linux_${{ matrix.arch }}.${{ env.FORMAT }}" >> $GITHUB_ENV
+          if [ "${{ env.FORMAT }}" = "tar" ]; then
+            # tar -> docker-archive（等价 docker save，可直接 docker load -i）
+            echo "OUT_TYPE=docker" >> $GITHUB_ENV
+          else
+            # oci -> OCI layout（需 nerdctl/ctr/skopeo 导入）
+            echo "OUT_TYPE=oci" >> $GITHUB_ENV
+          fi
 
       - name: Build and export image (linux/${{ matrix.arch }})
         if: env.ARCH == 'both' || env.ARCH == matrix.arch
@@ -110,7 +117,7 @@ jobs:
             --platform linux/${{ matrix.arch }} \
             -f ai-service/Dockerfile \
             -t ai-service:${{ matrix.arch }} \
-            --output type=${{ env.FORMAT }},dest=${{ env.FILE }} \
+            --output type=${{ env.OUT_TYPE }},dest=${{ env.FILE }} \
             ai-service
 
       - name: Verify exported file exists (linux/${{ matrix.arch }})
