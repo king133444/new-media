@@ -48,14 +48,15 @@ type ChatItem = { role: "user" | "assistant"; content: string };
 
 function roleToInspireRole(
   role?: string
-): "creator" | "advertiser" | "designer" {
+): "creator" | "advertiser" | "designer" | "admin"{
   if (role === "ADVERTISER") return "advertiser";
   if (role === "DESIGNER") return "designer";
+  if (role === "ADMIN") return "admin";
   return "creator";
 }
 
 async function fetchSuggestions(
-  role: "creator" | "advertiser" | "designer",
+  role: "creator" | "advertiser" | "designer" | "admin",
   authToken?: string | null
 ) {
   const res = await fetch(
@@ -73,7 +74,7 @@ async function fetchSuggestions(
 }
 
 async function streamInspire(
-  role: "creator" | "advertiser" | "designer",
+  role: "creator" | "advertiser" | "designer" | "admin",
   topic: string,
   messages: ChatItem[],
   onChunk: (text: string) => void,
@@ -138,6 +139,8 @@ const AIAssistant: React.FC = () => {
 
   useEffect(() => {
     if (!open) return;
+    console.log('role', r);
+    
     fetchSuggestions(r, authToken)
       .then((data) => setSuggests(data.suggestions || []))
       .catch(() => setSuggests([]));

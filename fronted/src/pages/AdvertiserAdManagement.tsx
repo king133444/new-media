@@ -161,7 +161,7 @@ const AdvertiserAdManagement: React.FC = () => {
         </Form.Item>
 
         {/* 预上传附件（创建成功后自动归属到该订单） */}
-        <Form.Item label="附件（可选）">
+        <Form.Item label="验收标准（可选）">
           <Upload
             multiple
             fileList={attachFiles}

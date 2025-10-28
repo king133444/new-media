@@ -46,7 +46,7 @@ const OrderManagement: React.FC = () => {
 
   const [orders, setOrders] = useState<any[]>([]);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(6);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -707,7 +707,7 @@ const OrderManagement: React.FC = () => {
               <Select.Option value="OTHER">其他</Select.Option>
             </Select>
           </div> */}
-          <div style={{ alignSelf: "flex-end", marginTop: 24, }}>
+          <div style={{ alignSelf: "flex-end", marginTop: 24 }}>
             <Button type="primary" onClick={fetchOrders}>
               查询
             </Button>
@@ -1132,7 +1132,7 @@ const OrderManagement: React.FC = () => {
 
             {/* 附件（广告商在发布前/后均可上传；双方可见） */}
             <Card
-              title="附件"
+              title="验收标准"
               extra={
                 user?.role === "ADVERTISER" && (
                   <Space>
@@ -1534,218 +1534,219 @@ const OrderManagement: React.FC = () => {
 
       {/* 申请人作品集查看 */}
       <Modal
-  title={
-    portfoliosOwner
-      ? `作品集：${portfoliosOwner.username || portfoliosOwner.id}`
-      : "作品集"
-  }
-  open={portfoliosVisible}
-  width={900}
-  footer={null}
-  onCancel={() => {
-    setPortfoliosVisible(false);
-    setPortfolios([]);
-    setPortfoliosOwner(null);
-  }}
->
-  {portfoliosLoading ? (
-    <div style={{ textAlign: "center", padding: 24 }}>加载中...</div>
-  ) : portfolios.length === 0 ? (
-    <div style={{ textAlign: "center", padding: 24, color: "#999" }}>
-      无作品集
-    </div>
-  ) : (
-    <Tabs
-      items={portfolios.map((p: any) => ({
-        key: p.id,
-        label: (
-          <span>
-            {p.title}
-            <Tag
-              style={{ marginLeft: 8 }}
-              color={
-                p.status === "ACTIVE"
-                  ? "green"
-                  : p.status === "INACTIVE"
-                  ? "orange"
-                  : "default"
-              }
-            >
-              {p.status === "ACTIVE"
-                ? "已审核"
-                : p.status === "INACTIVE"
-                ? "待审核"
-                : "已下架"}
-            </Tag>
-          </span>
-        ),
-        children: (
-          <>
-            {/* 缩略图与描述部分（左右布局） */}
-            <div
-              style={{
-                display: "flex",
-                gap: 12,
-                alignItems: "center",
-                marginBottom: 12,
-              }}
-            >
-              {/* 左侧：缩略图 */}
-              <div
-                style={{
-                  width: 120,
-                  height: 90,
-                  borderRadius: 6,
-                  overflow: "hidden",
-                  background: "#f5f5f5",
-                }}
-              >
-                {(() => {
-                  const thumb = p.thumbnail;
-                  const first = p.materials?.[0]?.url;
-                  const src = thumb || first;
-                  return src ? (
-                    <Image
-                      src={resolveFileUrl(src)}
-                      alt={p.title}
+        title={
+          portfoliosOwner
+            ? `作品集：${portfoliosOwner.username || portfoliosOwner.id}`
+            : "作品集"
+        }
+        open={portfoliosVisible}
+        width={900}
+        footer={null}
+        onCancel={() => {
+          setPortfoliosVisible(false);
+          setPortfolios([]);
+          setPortfoliosOwner(null);
+        }}
+      >
+        {portfoliosLoading ? (
+          <div style={{ textAlign: "center", padding: 24 }}>加载中...</div>
+        ) : portfolios.length === 0 ? (
+          <div style={{ textAlign: "center", padding: 24, color: "#999" }}>
+            无作品集
+          </div>
+        ) : (
+          <Tabs
+            items={portfolios.map((p: any) => ({
+              key: p.id,
+              label: (
+                <span>
+                  {p.title}
+                  <Tag
+                    style={{ marginLeft: 8 }}
+                    color={
+                      p.status === "ACTIVE"
+                        ? "green"
+                        : p.status === "INACTIVE"
+                        ? "orange"
+                        : "default"
+                    }
+                  >
+                    {p.status === "ACTIVE"
+                      ? "已审核"
+                      : p.status === "INACTIVE"
+                      ? "待审核"
+                      : "已下架"}
+                  </Tag>
+                </span>
+              ),
+              children: (
+                <>
+                  {/* 缩略图与描述部分（左右布局） */}
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 12,
+                      alignItems: "center",
+                      marginBottom: 12,
+                    }}
+                  >
+                    {/* 左侧：缩略图 */}
+                    <div
                       style={{
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "cover",
+                        width: 120,
+                        height: 90,
+                        borderRadius: 6,
+                        overflow: "hidden",
+                        background: "#f5f5f5",
                       }}
-                      preview={false}
-                    />
-                  ) : null;
-                })()}
-              </div>
-
-              {/* 右侧：作品描述 */}
-              <div
-                style={{
-                  flex: 1,
-                  color: "#666",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {p.description ? (
-                  p.description.length > 100 ? (
-                    <>
-                      {p.description.substring(0, 100)}...
-                      <span
-                        style={{ color: "blue", cursor: "pointer" }}
-                        onClick={() => alert(p.description)}
-                      >
-                        查看更多
-                      </span>
-                    </>
-                  ) : (
-                    p.description
-                  )
-                ) : (
-                  "暂无描述"
-                )}
-              </div>
-            </div>
-
-            {/* 折叠面板显示材料 */}
-            <Collapse defaultActiveKey={['1']}>
-              <Collapse.Panel header="材料展示" key="1">
-                {/* 如果没有材料则显示 "暂无材料" */}
-                {p.materials.length === 0 ? (
-                  <div style={{ textAlign: "center", color: "#999" }}>
-                    暂无材料
-                  </div>
-                ) : (
-                  p.materials.map((m: any) => (
-                    <Card
-                      key={m.id}
-                      hoverable
-                      style={{
-                        width: 150, // 保持材料展示的大小
-                        marginBottom: 12, // 添加底部间距
-                      }}
-                      cover={
-                        m.url && /\.(png|jpg|jpeg|gif|webp)$/i.test(m.url) ? (
+                    >
+                      {(() => {
+                        const thumb = p.thumbnail;
+                        const first = p.materials?.[0]?.url;
+                        const src = thumb || first;
+                        return src ? (
                           <Image
-                            src={resolveFileUrl(m.url)}
-                            alt={m.title || ""}
+                            src={resolveFileUrl(src)}
+                            alt={p.title}
                             style={{
-                              height: 100, // 保持图片的大小
+                              width: "100%",
+                              height: "100%",
                               objectFit: "cover",
                             }}
+                            preview={false}
                           />
-                        ) : (
-                          <div
-                            style={{
-                              height: 100,
-                              background: "#f5f5f5",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              color: "#999",
-                            }}
-                          >
-                            无预览
-                          </div>
-                        )
-                      }
-                      actions={[
-                        <span
-                          key={`preview-${m.id}`}
-                          onClick={async () => {
-                            try {
-                              const resp = await http.get(
-                                `/materials/${m.id}/preview`,
-                                { responseType: "blob" }
-                              );
-                              const blob = new Blob([resp.data]);
-                              const filename =
-                                m.title || `material-${m.id}`;
-                              const nav: any = window.navigator;
-                              if (
-                                nav &&
-                                typeof nav.msSaveOrOpenBlob === "function"
-                              ) {
-                                nav.msSaveOrOpenBlob(blob, filename);
-                                return;
-                              }
-                              const url = window.URL.createObjectURL(blob);
-                              const a = document.createElement("a");
-                              a.href = url;
-                              a.download = filename;
-                              document.body.appendChild(a);
-                              a.click();
-                              a.remove();
-                              window.URL.revokeObjectURL(url);
-                            } catch {
-                              message.error("下载失败");
-                            }
-                          }}
-                        >
-                          下载/预览
-                        </span>,
-                      ]}
-                    >
-                      <Card.Meta
-                        title={m.title || "未命名文件"}
-                        description={dayjs(m.createdAt).format(
-                          "YYYY-MM-DD HH:mm"
-                        )}
-                      />
-                    </Card>
-                  ))
-                )}
-              </Collapse.Panel>
-            </Collapse>
-          </>
-        ),
-      }))}
-    />
-  )}
-</Modal>
+                        ) : null;
+                      })()}
+                    </div>
 
+                    {/* 右侧：作品描述 */}
+                    <div
+                      style={{
+                        flex: 1,
+                        color: "#666",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {p.description ? (
+                        p.description.length > 100 ? (
+                          <>
+                            {p.description.substring(0, 100)}...
+                            <span
+                              style={{ color: "blue", cursor: "pointer" }}
+                              onClick={() => alert(p.description)}
+                            >
+                              查看更多
+                            </span>
+                          </>
+                        ) : (
+                          p.description
+                        )
+                      ) : (
+                        "暂无描述"
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 折叠面板显示材料 */}
+                  <Collapse defaultActiveKey={["1"]}>
+                    <Collapse.Panel header="材料展示" key="1">
+                      {/* 如果没有材料则显示 "暂无材料" */}
+                      {p.materials.length === 0 ? (
+                        <div style={{ textAlign: "center", color: "#999" }}>
+                          暂无材料
+                        </div>
+                      ) : (
+                        p.materials.map((m: any) => (
+                          <Card
+                            key={m.id}
+                            hoverable
+                            style={{
+                              width: 150, // 保持材料展示的大小
+                              marginBottom: 12, // 添加底部间距
+                            }}
+                            cover={
+                              m.url &&
+                              /\.(png|jpg|jpeg|gif|webp)$/i.test(m.url) ? (
+                                <Image
+                                  src={resolveFileUrl(m.url)}
+                                  alt={m.title || ""}
+                                  style={{
+                                    height: 100, // 保持图片的大小
+                                    objectFit: "cover",
+                                  }}
+                                />
+                              ) : (
+                                <div
+                                  style={{
+                                    height: 100,
+                                    background: "#f5f5f5",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    color: "#999",
+                                  }}
+                                >
+                                  无预览
+                                </div>
+                              )
+                            }
+                            actions={[
+                              <span
+                                key={`preview-${m.id}`}
+                                onClick={async () => {
+                                  try {
+                                    const resp = await http.get(
+                                      `/materials/${m.id}/preview`,
+                                      { responseType: "blob" }
+                                    );
+                                    const blob = new Blob([resp.data]);
+                                    const filename =
+                                      m.title || `material-${m.id}`;
+                                    const nav: any = window.navigator;
+                                    if (
+                                      nav &&
+                                      typeof nav.msSaveOrOpenBlob === "function"
+                                    ) {
+                                      nav.msSaveOrOpenBlob(blob, filename);
+                                      return;
+                                    }
+                                    const url =
+                                      window.URL.createObjectURL(blob);
+                                    const a = document.createElement("a");
+                                    a.href = url;
+                                    a.download = filename;
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    a.remove();
+                                    window.URL.revokeObjectURL(url);
+                                  } catch {
+                                    message.error("下载失败");
+                                  }
+                                }}
+                              >
+                                下载/预览
+                              </span>,
+                            ]}
+                          >
+                            <Card.Meta
+                              title={m.title || "未命名文件"}
+                              description={dayjs(m.createdAt).format(
+                                "YYYY-MM-DD HH:mm"
+                              )}
+                            />
+                          </Card>
+                        ))
+                      )}
+                    </Collapse.Panel>
+                  </Collapse>
+                </>
+              ),
+            }))}
+          />
+        )}
+      </Modal>
 
       {/* 申请列表与委派 */}
       <Modal
@@ -1756,18 +1757,12 @@ const OrderManagement: React.FC = () => {
           setAppModalOrder(null);
         }}
         footer={null}
-        width={600}
+        width={800}
       >
         {appModalOrder && (
           <List
             loading={appLoading}
-            dataSource={(appModalOrder.applications || [])
-              .slice()
-              .sort(
-                (a: any, b: any) =>
-                  new Date(b.createdAt).getTime() -
-                  new Date(a.createdAt).getTime()
-              )}
+            dataSource={(appModalOrder.applications || [])}
             renderItem={(app: any) => (
               <List.Item
                 actions={[
@@ -1804,6 +1799,7 @@ const OrderManagement: React.FC = () => {
                   title={
                     <span>
                       {app.user?.username || app.userId}
+
                       {typeof app.user?.averageRating === "number" && (
                         <Tag color="blue" style={{ marginLeft: 8 }}>
                           均分 {app.user.averageRating}
@@ -1842,6 +1838,7 @@ const OrderManagement: React.FC = () => {
                         {app.user?.bio && (
                           <div style={{ marginBottom: 4 }}>{app.user.bio}</div>
                         )}
+
                         {(skills.length > 0 || tags.length > 0) && (
                           <div
                             style={{
@@ -1860,6 +1857,24 @@ const OrderManagement: React.FC = () => {
                                 {t}
                               </Tag>
                             ))}
+                          </div>
+                        )}
+                        {app.message?.trim() && (
+                          <div style={{ marginBottom: 4 }}>
+                            {/* <Typography.Text strong>留言：</Typography.Text> */}
+                            <div
+                              style={{
+                                marginTop: 8,
+                                marginBottom: 16,
+                                padding: 12,
+                                background: "#f5f5f5",
+                                borderRadius: 6,
+                              }}
+                            >
+                              <Typography.Text>
+                                留言：{app.message}
+                              </Typography.Text>
+                            </div>
                           </div>
                         )}
                       </div>

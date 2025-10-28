@@ -19,7 +19,7 @@ export class StatisticsController {
   @Get('platform')
   @ApiOperation({ summary: '获取平台整体统计数据' })
   @ApiResponse({ status: 200, description: '获取成功' })
-  getPlatformStats() {
+    getPlatformStats() {
     return this.statisticsService.getPlatformStats();
   }
 

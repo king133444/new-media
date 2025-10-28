@@ -280,7 +280,20 @@ export class OrdersService {
     };
     const tags = parseArr((order as any).tags);
     const requirements = parseArr((order as any).requirements);
-    return { ...order, tags, requirements, applications: enhancedApps } as any;
+
+    // 使用 AI 对申请人进行排序；若 AI 结果无效则按评分降序回退
+    let sortedApplications = enhancedApps;
+    try {
+      sortedApplications = await this.rankApplicationsWithAI(
+        { id, requirements, tags },
+        enhancedApps
+      );
+    } catch (e) {
+      // 静默回退
+      sortedApplications = this.sortApplicationsByRating(enhancedApps, { requirements, tags });
+    }
+
+    return { ...order, tags, requirements, applications: sortedApplications } as any;
   }
 
   // 更新订单（广告商）
@@ -1009,7 +1022,6 @@ export class OrdersService {
           } catch {}
         }
       } catch (e) {
-        console.log("smartMatch AI error", e);
         return { data: [], notice: "网络问题，AI 匹配暂不可用，请稍后再试", total: 0, page: 1, pageSize: 0, totalPages: 0 };
       }
     }
@@ -1058,5 +1070,174 @@ export class OrdersService {
     const sliceIds = availableIds.slice(start, start + pageSize);
     const pageData = sliceIds.map((id) => idToOrder[id]);
     return { data: pageData, notice: "AI 已为您筛选出匹配的订单", total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
+  }
+
+  // ============ Applicant Ranking (AI + Fallback) ============
+  private sortApplicationsByRating(apps: any[], orderCtx?: { requirements?: string[]; tags?: string[] }) {
+    const arr = Array.isArray(apps) ? apps.slice() : [];
+    const req = (orderCtx?.requirements || []).map((s) => (s || '').toString().trim().toLowerCase()).filter(Boolean);
+    const otags = (orderCtx?.tags || []).map((s) => (s || '').toString().trim().toLowerCase()).filter(Boolean);
+    const reqSet = new Set([...req, ...otags]);
+
+    const sim = (app: any) => {
+      const as = this.safeParseArray(app?.user?.skills).map((s) => (s || '').toString().trim().toLowerCase());
+      const at = this.safeParseArray(app?.user?.tags).map((s) => (s || '').toString().trim().toLowerCase());
+      if (!reqSet.size) return 0;
+      let hit = 0;
+      for (const v of [...as, ...at]) if (reqSet.has(v)) hit++;
+      return hit;
+    };
+
+    arr.sort((a: any, b: any) => {
+      const ar = Number(a?.user?.averageRating || 0);
+      const br = Number(b?.user?.averageRating || 0);
+      if (br !== ar) return br - ar;
+      const ac = Number(a?.user?.reviewsCount || 0);
+      const bc = Number(b?.user?.reviewsCount || 0);
+      if (bc !== ac) return bc - ac;
+      const sa = sim(a);
+      const sb = sim(b);
+      if (sb !== sa) return sb - sa;
+      const ta = new Date(a?.createdAt || 0).getTime();
+      const tb = new Date(b?.createdAt || 0).getTime();
+      return tb - ta; // 最后按时间降序
+    });
+    return arr;
+  }
+
+  private isValidAiRanking(ids: string[], candidates: string[]) {
+    if (!Array.isArray(ids) || !ids.length) return false;
+    // 允许为候选集的子序列（命中部分），完全命中则更好
+    const setB = new Set(candidates);
+    for (const id of ids) if (!setB.has(id)) return false;
+    return true;
+  }
+
+  private async rankApplicationsWithAI(order: { id: string; requirements: string[]; tags: string[] }, apps: any[]) {
+    try {
+      const candidates = (apps || []).map((a: any) => ({
+        id: a.userId,
+        username: a?.user?.username,
+        skills: Array.isArray(a?.user?.skills)
+          ? a.user.skills
+          : this.safeParseArray(a?.user?.skills),
+        tags: Array.isArray(a?.user?.tags)
+          ? a.user.tags
+          : this.safeParseArray(a?.user?.tags),
+        averageRating: Number(a?.user?.averageRating || 0),
+        reviewsCount: Number(a?.user?.reviewsCount || 0),
+      }));
+
+      const maxReviews = Math.max(1, ...candidates.map((c) => c.reviewsCount));
+      const lines = candidates.map((c) => {
+        const ratingNorm = Math.max(0, Math.min(1, c.averageRating / 5));
+        const reviewsNorm = Math.max(0, Math.min(1, c.reviewsCount / maxReviews));
+        return `id=${c.id}; name=${c.username}; rating=${c.averageRating}; rating_norm=${ratingNorm.toFixed(4)}; reviews=${c.reviewsCount}; reviews_norm=${reviewsNorm.toFixed(4)}; skills=[${(c.skills||[]).join(',')}]; tags=[${(c.tags||[]).join(',')}]`;
+      });
+
+      const sys = [
+        '你是申请人排序器。必须只返回 JSON，且严格遵守键名与结构：',
+        '{"applicantIds":["..."], "scores": {"<id>": <number>}}。',
+        '排序依据（从高到低权重）：评分>评价数>与订单要求/标签的重叠度>其它。',
+        '推荐打分公式： score = 0.6*rating_norm + 0.15*reviews_norm + 0.2*overlap_requirements + 0.05*overlap_tags。',
+        '其中 overlap_* 为 [0,1] 的比例（相交项/订单对应项数量，缺省则为0）；必须包含所有申请人的 id。',
+      ].join(' ');
+      const userMsg = [
+        `订单: ${order.id}`,
+        `requirements=[${(order.requirements||[]).join(',')}]`,
+        `tags=[${(order.tags||[]).join(',')}]`,
+        '申请人列表（包含归一化指标）：',
+        ...lines,
+        '请计算每位申请人的 score 并按降序排列，输出 JSON：{"applicantIds": [id...], "scores": {"id": number}}；不得输出任何额外文本。',
+      ].join('\n');
+
+      const base = process.env.AI_SERVICE_URL || 'http://localhost:3001';
+      const url = `${base.replace(/\/$/, '')}/v1/chat`;
+      const headers: any = { 'Content-Type': 'application/json' };
+      const aiKey = process.env.AI_SERVICE_API_KEY;
+      if (aiKey) headers['X-API-Key'] = aiKey;
+
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          messages: [
+            { role: 'system', content: sys },
+            { role: 'user', content: userMsg },
+          ],
+          provider: 'qwen',
+          model: 'qwen-flash',
+          temperature: 0.2,
+        }),
+      } as any);
+      const raw = await resp.text();
+      try {
+      } catch {}
+      if (!resp.ok) throw new Error(`AI ${resp.status}: ${raw}`);
+      let data: any = {};
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch {
+        // 非 JSON 返回，交给下游解析失败处理
+        data = {};
+      }
+      const text = data?.choices?.[0]?.message?.content || '';
+      const match = text.match(/\{[\s\S]*\}/);
+      let ids: string[] = [];
+      let scores: Record<string, number> = {};
+      if (match) {
+        try {
+          const obj = JSON.parse(match[0]);
+          ids = Array.isArray(obj.applicantIds)
+            ? obj.applicantIds.filter((x: any) => typeof x === 'string')
+            : [];
+          if (obj.scores && typeof obj.scores === 'object') {
+            scores = Object.fromEntries(
+              Object.entries(obj.scores).filter(([k, v]) => typeof k === 'string' && typeof v === 'number')
+            ) as Record<string, number>;
+          }
+        } catch {}
+      }
+
+      const allIds = candidates.map((c) => c.id);
+      if (!this.isValidAiRanking(ids, allIds)) {
+        const fb = this.sortApplicationsByRating(apps, { requirements: order.requirements, tags: order.tags });
+        try {
+          console.log('[apps-sort][FB] finalOrder=', JSON.stringify(fb.map((a: any) => a.userId)));
+        } catch {}
+        return fb;
+      }
+
+      const idToApp: Record<string, any> = Object.fromEntries(
+        (apps || []).map((a: any) => [a.userId, a])
+      );
+      let picked = ids.map((id) => idToApp[id]).filter(Boolean);
+      // 若附带 scores，则按分数降序排序；随后再用回退规则保证“评分优先”
+      if (Object.keys(scores).length) {
+        picked.sort((a: any, b: any) => (scores[b.userId] || 0) - (scores[a.userId] || 0));
+      }
+      const rankedPicked = this.sortApplicationsByRating(picked, { requirements: order.requirements, tags: order.tags });
+      const remain = (apps || []).filter((a: any) => !ids.includes(a.userId));
+      const rankedRemain = this.sortApplicationsByRating(remain, { requirements: order.requirements, tags: order.tags });
+      const finalArr = [...rankedPicked, ...rankedRemain];
+      return finalArr;
+    } catch (e) {
+      // 失败回退到评分排序
+      return this.sortApplicationsByRating(apps, { requirements: order.requirements, tags: order.tags });
+    }
+  }
+
+  private safeParseArray(val: any): string[] {
+    if (!val) return [];
+    if (Array.isArray(val)) return val as string[];
+    if (typeof val === 'string') {
+      try {
+        const arr = JSON.parse(val);
+        return Array.isArray(arr) ? (arr as string[]) : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
   }
 }

@@ -186,7 +186,7 @@ const Login: React.FC = () => {
         </Tabs>
 
         <div style={{ textAlign: 'center', marginTop: '20px', color: '#999' }}>
-          <p>系统功能包括：用户管理、订单管理、评价管理、客户管理、素材管理、系统管理等</p>
+          <p>系统功能包括：用户管理、广告投放、订单管理、作品集管理、交易管理以及交流中心等</p>
         </div>
       </Card>
     </div>

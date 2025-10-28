@@ -17,6 +17,13 @@ import { StatisticsModule } from './statistics/statistics.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      // envFilePath: [
+      //   `.env.${process.env.NODE_ENV}.local`,
+      //   `.env.${process.env.NODE_ENV}`,
+      //   `.env.local`,
+      //   `.env`,
+      //   'prisma/.env',
+      // ],
     }),
     PrismaModule,
     AuthModule,
