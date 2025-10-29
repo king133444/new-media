@@ -90,7 +90,7 @@
 
 - 评价管理
   - 仅展示“与我有关”的评价（我给出的/我收到的）；管理员可查看全部。
-  - 订单确认收货后，系统为双方各生成一条“待评价”记录（PENDING），铃铛“去评价”直达 `/reviews?openReviewForOrder=<orderId>` 并只弹一次编辑弹窗。
+  - 订单确认收货后，系统为广告商生成一条“待评价”记录（PENDING），铃铛“去评价”直达 `/reviews?openReviewForOrder=<orderId>` 并只弹一次编辑弹窗。
 
 - 交易管理
   - 创作者交易页路径：`/creator/transactions`（侧边菜单已更新）。
